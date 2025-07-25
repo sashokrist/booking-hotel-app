@@ -15,7 +15,7 @@ class SyncBookingsCommand extends Command
 {
     protected $signature = 'sync:bookings {--since=}';
     protected $description = 'Sync bookings, guests, rooms, and room types from PMS API';
-    protected $rateLimitDelay = 500000; // 500ms = 2 requests per second
+    protected $rateLimitDelay = 500000; // 500ms
 
     public function handle()
     {
@@ -23,128 +23,178 @@ class SyncBookingsCommand extends Command
         $this->info("Syncing bookings updated since: $since");
 
         try {
-            $response = Http::pms()->get('bookings', [
-                'updated_at.gt' => $since,
-            ]);
+            $response = Http::pms()->get('bookings', ['updated_at.gt' => $since]);
             usleep($this->rateLimitDelay);
 
             if ($response->failed()) {
-                Log::error("❌ Failed to fetch booking IDs", ['response' => $response->body()]);
+                Log::error("Failed to fetch booking IDs", ['response' => $response->body()]);
                 $this->error('Failed to fetch booking IDs');
                 return;
             }
 
-            $bookingIds = $response->json('data') ?? [];
-        $this->info("Fetched " . count($bookingIds) . " updated bookings.");
+            $bookingIds = collect($response->json('data') ?? [])
+                ->map(fn ($item) => is_array($item) ? ($item['id'] ?? null) : (is_numeric($item) ? $item : null))
+                ->filter(fn ($id) => is_numeric($id))
+                ->unique()
+                ->values()
+                ->all();
 
-        $chunkSize = 100; // adjust as needed
+            $this->info("Fetched " . count($bookingIds) . " updated bookings.");
 
-        foreach (array_chunk($bookingIds, $chunkSize) as $chunk) {
-            foreach ($chunk as $bookingId) {
-                if (!is_numeric($bookingId)) {
-                    Log::warning("⚠️ Skipping invalid booking ID", ['value' => $bookingId]);
-                    continue;
-                }
-
-                DB::beginTransaction();
-
-                try {
-                    $booking = Http::pms()->get("bookings/{$bookingId}")->json();
-                    usleep($this->rateLimitDelay);
-
-                    if (empty($booking['id']) || empty($booking['room_id'])) {
-                        throw new \Exception("Invalid booking data for ID: $bookingId");
-                    }
-
-                    // Fetch room
-                    $room = Http::pms()->get("rooms/{$booking['room_id']}")->json();
-                    usleep($this->rateLimitDelay);
-
-                    // Fallback for missing room_type_id
-                    $roomTypeId = $room['room_type_id'] ?? ($booking['room_type_id'] ?? null);
-
-                    if (!$roomTypeId) {
-                        Log::warning("⚠️ Skipping booking ID {$bookingId} due to missing room_type_id", [
-                            'room' => $room,
-                            'booking' => $booking
-                        ]);
-                        DB::rollBack();
-                        continue;
-                    }
-
-                    Room::updateOrCreate(
-                        ['id' => $room['id']],
-                        [
-                            'number'        => $room['number'] ?? null,
-                            'room_type_id'  => $roomTypeId,
-                            'status'        => $room['status'] ?? null,
-                        ]
-                    );
-
-                    // Fetch room type
-                    $roomType = Http::pms()->get("room-types/{$roomTypeId}")->json();
-                    usleep($this->rateLimitDelay);
-
-                    RoomType::updateOrCreate(
-                        ['id' => $roomType['id']],
-                        [
-                            'name'        => $roomType['name'] ?? null,
-                            'description' => $roomType['description'] ?? null,
-                            'capacity'    => $roomType['capacity'] ?? null,
-                            'price'       => $roomType['price'] ?? null,
-                        ]
-                    );
-
-                    // Sync guests
-                    foreach ($booking['guest_ids'] ?? [] as $guestId) {
-                        $guest = Http::pms()->get("guests/{$guestId}")->json();
+            foreach (array_chunk($bookingIds, 100) as $chunk) {
+                foreach ($chunk as $bookingId) {
+                    DB::beginTransaction();
+                    try {
+                        $response = Http::pms()->get("bookings/{$bookingId}");
                         usleep($this->rateLimitDelay);
 
-                        Guest::updateOrCreate(
-                            ['id' => $guest['id']],
+                        $booking = $response->successful() ? $response->json() : null;
+
+                        $this->info("Fetched booking {$bookingId} guest_ids from PMS: [" . implode(', ', $booking['guest_ids']) . "]");
+
+
+                        if (!$booking || empty($booking['id']) || empty($booking['guest_ids']) || !is_array($booking['guest_ids'])) {
+                            DB::rollBack();
+                            $this->warn("⚠️ Skipping booking ID {$bookingId} — invalid or missing guest_ids.");
+                            continue;
+                        }
+
+                        $room = Http::pms()->get("rooms/{$booking['room_id']}")->json();
+                        usleep($this->rateLimitDelay);
+
+                        $roomTypeId = $room['room_type_id'] ?? ($booking['room_type_id'] ?? null);
+                        if (!$roomTypeId) {
+                            Log::warning("⚠️ Skipping booking ID {$bookingId} due to missing room_type_id", [
+                                'room' => $room,
+                                'booking' => $booking,
+                            ]);
+                            DB::rollBack();
+                            continue;
+                        }
+
+                        Room::updateOrCreate(
+                            ['id' => $room['id']],
                             [
-                                'first_name' => $guest['first_name'] ?? null,
-                                'last_name'  => $guest['last_name'] ?? null,
-                                'email'      => $guest['email'] ?? null,
-                                'phone'      => $guest['phone'] ?? null,
+                                'number' => $room['number'] ?? null,
+                                'floor' => $room['floor'] ?? null,
+                                'room_type_id' => $roomTypeId,
                             ]
                         );
+                        $this->info("   → Room synced: ID {$room['id']} ({$room['number']})");
+
+                        $roomType = Http::pms()->get("room-types/{$roomTypeId}")->json();
+                        usleep($this->rateLimitDelay);
+
+                        RoomType::updateOrCreate(
+                            ['id' => $roomType['id']],
+                            [
+                                'name' => $roomType['name'] ?? null,
+                                'description' => $roomType['description'] ?? null,
+                            ]
+                        );
+                        $this->info("   → RoomType synced: ID {$roomType['id']} ({$roomType['name']})");
+
+                        if (!isset($booking['guest_ids']) || !is_array($booking['guest_ids']) || empty($booking['guest_ids'])) {
+                            DB::rollBack();
+                            $this->warn("⚠️ Skipping booking ID {$bookingId} — no valid guest_ids array.");
+                            continue;
+                        }
+
+                        $syncedGuestIds = [];
+                        
+                        foreach ($booking['guest_ids'] as $guestId) {
+                            $guestResponse = Http::pms()->get("guests/{$guestId}");
+                            usleep($this->rateLimitDelay);
+
+                            if ($guestResponse->failed()) {
+                                Log::warning("⚠️ Failed to fetch guest ID {$guestId}", ['response' => $guestResponse->body()]);
+                                $this->warn("   ⚠️ Guest ID {$guestId} skipped (fetch failed)");
+                                continue;
+                            }
+
+                            $guest = $guestResponse->json();
+
+                            if (empty($guest['id'])) {
+                                Log::warning("⚠️ Guest missing ID in response", ['guest' => $guest]);
+                                $this->warn("   ⚠️ Guest ID {$guestId} skipped (missing ID)");
+                                continue;
+                            }
+
+                            Guest::updateOrCreate(
+                                ['id' => $guest['id']],
+                                [
+                                    'first_name' => $guest['first_name'] ?? null,
+                                    'last_name' => $guest['last_name'] ?? null,
+                                    'email' => $guest['email'] ?? null,
+                                    'phone' => $guest['phone'] ?? null,
+                                ]
+                            );
+
+                            $syncedGuestIds[] = (int) $guest['id'];
+                            $this->info("   → Guest synced: ID {$guest['id']} ({$guest['first_name']} {$guest['last_name']})");
+                        }
+
+                        $existing = Booking::find($booking['id']);
+                        $existingGuests = is_array($existing?->guest_ids) ? $existing->guest_ids : json_decode($existing->guest_ids ?? '[]', true);
+                        $newGuests = $syncedGuestIds;
+
+                        sort($existingGuests);
+                        sort($newGuests);
+
+                        $unchanged = (
+                            $existing &&
+                            $existingGuests === $newGuests &&
+                            (int) $existing->room_id === (int) $booking['room_id'] &&
+                            $existing->check_in === ($booking['arrival_date'] ?? null) &&
+                            $existing->check_out === ($booking['departure_date'] ?? null) &&
+                            $existing->status === ($booking['status'] ?? null)
+                        );
+
+                        if ($unchanged) {
+                            DB::rollBack();
+                            $this->warn("⏭️ Skipped booking ID {$bookingId} — already up-to-date.");
+                            continue;
+                        }
+
+                        $bookingModel = Booking::firstOrNew(['id' => $booking['id']]);
+                        $this->info("   → Booking guests: [" . implode(', ', $syncedGuestIds) . "]");
+
+                        $bookingModel->fill([
+                            'external_id' => $booking['external_id'] ?? null,
+                            'room_id' => $booking['room_id'],
+                            'check_in' => $booking['arrival_date'] ?? null,
+                            'check_out' => $booking['departure_date'] ?? null,
+                            'status' => $booking['status'] ?? null,
+                            'notes' => $booking['notes'] ?? null,
+                        ]);
+                        $bookingModel->guest_ids = array_map('intval', $syncedGuestIds);
+
+
+                        if ($bookingModel->isDirty()) {
+                            $bookingModel->save();
+                            DB::commit();
+                            Log::info("✅ Booking saved", ['id' => $booking['id']]);
+                            $this->line("✅ Synced booking ID: {$booking['id']}");
+                        } else {
+                            DB::rollBack();
+                            $this->warn("⏭️ Skipped booking ID {$bookingId} — already up-to-date.");
+                        }
+                    } catch (\Exception $e) {
+                        DB::rollBack();
+                        Log::error("Error syncing booking ID {$bookingId}", [
+                            'error' => $e->getMessage(),
+                            'trace' => $e->getTraceAsString(),
+                        ]);
+                        $this->error("Failed booking ID {$bookingId}: " . $e->getMessage());
                     }
-
-                    // Store booking
-                    $bookingModel = Booking::updateOrCreate(
-                        ['id' => $booking['id']],
-                        [
-                            'room_id'   => $booking['room_id'],
-                            'check_in'  => $booking['check_in'] ?? null,
-                            'check_out' => $booking['check_out'] ?? null,
-                            'status'    => $booking['status'] ?? null,
-                        ]
-                    );
-
-                    $bookingModel->guest_ids = json_encode($booking['guest_ids'] ?? []);
-                    $bookingModel->save();
-
-                    DB::commit();
-                    Log::info("✅ Booking saved", ['id' => $booking['id']]);
-                    $this->line("✅ Synced booking ID: {$booking['id']}");
-                } catch (\Exception $e) {
-                    DB::rollBack();
-                    Log::error("❌ Error syncing booking ID {$bookingId}", [
-                        'error' => $e->getMessage(),
-                        'trace' => $e->getTraceAsString(),
-                    ]);
-                    $this->error("❌ Failed booking ID {$bookingId}: " . $e->getMessage());
                 }
+                $this->info("Processed chunk of " . count($chunk) . " bookings.");
             }
 
             $this->info("✅ Sync complete.");
-        }
         } catch (\Exception $e) {
-            Log::error("❌ Global sync failure", ['error' => $e->getMessage()]);
+            Log::error("Global sync failure", ['error' => $e->getMessage()]);
             $this->error("Sync failed: " . $e->getMessage());
         }
-
-         $this->info("✅ Processed chunk of " . count($chunk) . " bookings.");
     }
 }

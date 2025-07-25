@@ -11,11 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-         Schema::create('rooms', function (Blueprint $table) {
+        Schema::create('rooms', function (Blueprint $table) {
             $table->id();
             $table->string('number')->nullable();
-            $table->unsignedBigInteger('room_type_id');
-            $table->string('status')->nullable();
+            $table->unsignedBigInteger('room_type_id')->nullable();
+            $table->unsignedInteger('floor')->nullable();
             $table->timestamps();
         });
     }

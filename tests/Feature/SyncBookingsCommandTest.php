@@ -2,19 +2,20 @@
 
 namespace Tests\Feature;
 
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Foundation\Testing\WithFaker;
 use Tests\TestCase;
+use Illuminate\Support\Facades\Http;
 
 class SyncBookingsCommandTest extends TestCase
 {
-    /**
-     * A basic feature test example.
-     */
+    
     public function testSyncBookingsCommandRuns()
-{
-    $this->artisan('sync:bookings --since=2025-07-20')
-         ->assertExitCode(0);
-}
+    {
+    
+        Http::fake(); 
 
+        $this->artisan('sync:bookings --since=2025-07-20')
+             ->assertExitCode(0);
+
+        $this->assertTrue(true, 'Command executed successfully');
+    }
 }

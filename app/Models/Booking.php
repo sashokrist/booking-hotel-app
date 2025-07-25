@@ -9,11 +9,13 @@ class Booking extends Model
 {
     protected $fillable = [
         'id',
+        'external_id',
         'room_id',
         'guest_ids',
         'check_in',
         'check_out',
         'status',
+        'notes',          
     ];
 
     public $incrementing = false;
@@ -21,8 +23,8 @@ class Booking extends Model
 
     protected $casts = [
         'guest_ids' => 'array',
-        'check_in' => 'datetime',
-        'check_out' => 'datetime',
+        'check_in'  => 'date', 
+        'check_out' => 'date',
     ];
 
     public function room()

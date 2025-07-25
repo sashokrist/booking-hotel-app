@@ -13,11 +13,13 @@ return new class extends Migration
     {
         Schema::create('bookings', function (Blueprint $table) {
             $table->unsignedBigInteger('id')->primary();
+            $table->string('external_id')->nullable();
             $table->unsignedBigInteger('room_id')->nullable();
             $table->json('guest_ids')->nullable();
-            $table->timestamp('check_in')->nullable();
-            $table->timestamp('check_out')->nullable();
+            $table->date('check_in')->nullable();
+            $table->date('check_out')->nullable();
             $table->string('status')->nullable();
+            $table->text('notes')->nullable();
             $table->timestamps();
         });
     }
