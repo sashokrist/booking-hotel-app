@@ -1,5 +1,7 @@
 <?php
 
+namespace App\Console\Commands;
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -15,7 +17,7 @@ class Booking extends Model
         'check_in',
         'check_out',
         'status',
-        'notes',          
+        'notes',
     ];
 
     public $incrementing = false;
@@ -23,7 +25,7 @@ class Booking extends Model
 
     protected $casts = [
         'guest_ids' => 'array',
-        'check_in'  => 'date', 
+        'check_in' => 'date',
         'check_out' => 'date',
     ];
 
@@ -38,10 +40,8 @@ class Booking extends Model
         return Guest::whereIn('id', is_array($ids) ? $ids : [])->get();
     }
 
-
     public function getGuestIdsAttribute($value)
     {
         return json_decode($value, true);
     }
-
 }
