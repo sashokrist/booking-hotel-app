@@ -44,6 +44,7 @@ class SyncBookingsCommand extends Command
             foreach (array_chunk($bookingIds, 100) as $chunk) {
                 foreach ($chunk as $bookingId) {
                     DB::beginTransaction();
+
                     try {
                         $response = Http::pms()->get("bookings/{$bookingId}");
                         usleep($this->rateLimitDelay);
@@ -52,6 +53,7 @@ class SyncBookingsCommand extends Command
 
                         $this->info("Fetched booking {$bookingId} guest_ids from PMS: [" . implode(', ', $booking['guest_ids']) . "]");
 
+                        $this->line("🔄 Start syncing booking ID: {$bookingId}");
 
                         if (!$booking || empty($booking['id']) || empty($booking['guest_ids']) || !is_array($booking['guest_ids'])) {
                             DB::rollBack();
@@ -80,7 +82,7 @@ class SyncBookingsCommand extends Command
                                 'room_type_id' => $roomTypeId,
                             ]
                         );
-                        $this->info("   → Room synced: ID {$room['id']} ({$room['number']})");
+                        $this->line("   🏨 Room ID: {$room['id']} | Number: {$room['number']} | Floor: {$room['floor']} | Room Type ID: {$roomTypeId}");
 
                         $roomType = Http::pms()->get("room-types/{$roomTypeId}")->json();
                         usleep($this->rateLimitDelay);
@@ -92,7 +94,7 @@ class SyncBookingsCommand extends Command
                                 'description' => $roomType['description'] ?? null,
                             ]
                         );
-                        $this->info("   → RoomType synced: ID {$roomType['id']} ({$roomType['name']})");
+                       $this->line("   🛏️ RoomType ID: {$roomType['id']} | Name: {$roomType['name']} | Description: " . ($roomType['description'] ?? 'N/A'));
 
                         if (!isset($booking['guest_ids']) || !is_array($booking['guest_ids']) || empty($booking['guest_ids'])) {
                             DB::rollBack();
@@ -134,21 +136,33 @@ class SyncBookingsCommand extends Command
                             $this->info("   → Guest synced: ID {$guest['id']} ({$guest['first_name']} {$guest['last_name']})");
                         }
 
-                        $existing = Booking::find($booking['id']);
-                        $existingGuests = is_array($existing?->guest_ids) ? $existing->guest_ids : json_decode($existing->guest_ids ?? '[]', true);
-                        $newGuests = $syncedGuestIds;
+
+                        $expectedGuestIds = array_map('intval', $booking['guest_ids']);
+                        sort($expectedGuestIds);
+                        sort($syncedGuestIds);
+
+                        // Check that all guests were fetched correctly
+                        if ($expectedGuestIds !== $syncedGuestIds) {
+                            DB::rollBack();
+                            $this->warn("⚠️ Skipping booking ID {$bookingId} — mismatched guest_ids. Expected: [" . implode(',', $expectedGuestIds) . "] Got: [" . implode(',', $syncedGuestIds) . "]");
+                            continue;
+                        }
+
+                       $existing = Booking::find($booking['id']);
+
+                        $existingGuests = is_array($existing?->guest_ids) ? array_map('intval', $existing->guest_ids) : [];
+                        $newGuests = array_map('intval', $syncedGuestIds);
 
                         sort($existingGuests);
                         sort($newGuests);
 
-                        $unchanged = (
-                            $existing &&
+                        $unchanged = $existing &&
                             $existingGuests === $newGuests &&
                             (int) $existing->room_id === (int) $booking['room_id'] &&
                             $existing->check_in === ($booking['arrival_date'] ?? null) &&
                             $existing->check_out === ($booking['departure_date'] ?? null) &&
-                            $existing->status === ($booking['status'] ?? null)
-                        );
+                            $existing->status === ($booking['status'] ?? null) &&
+                            ($existing->notes ?? '') === ($booking['notes'] ?? '');
 
                         if ($unchanged) {
                             DB::rollBack();
@@ -157,6 +171,7 @@ class SyncBookingsCommand extends Command
                         }
 
                         $bookingModel = Booking::firstOrNew(['id' => $booking['id']]);
+
                         $this->info("   → Booking guests: [" . implode(', ', $syncedGuestIds) . "]");
 
                         $bookingModel->fill([
