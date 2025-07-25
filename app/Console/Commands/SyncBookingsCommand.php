@@ -10,6 +10,7 @@ use App\Models\Booking;
 use App\Models\Guest;
 use App\Models\Room;
 use App\Models\RoomType;
+use App\Models\SyncLog;
 
 class SyncBookingsCommand extends Command
 {
@@ -20,7 +21,8 @@ class SyncBookingsCommand extends Command
     public function handle()
     {
         $since = $this->option('since') ?? now()->subDay()->toIso8601String();
-        $this->info("Syncing bookings updated since: $since");
+        $this->line("Syncing bookings updated since: $since");
+        $this->logSync('logTest', 0, 'info', 'Starting sync: ' . $since);
 
         try {
             $response = Http::pms()->get('bookings', ['updated_at.gt' => $since]);
@@ -29,6 +31,7 @@ class SyncBookingsCommand extends Command
             if ($response->failed()) {
                 Log::error("Failed to fetch booking IDs", ['response' => $response->body()]);
                 $this->error('Failed to fetch booking IDs');
+                $this->logSync('logTest', 0, 'failed', 'Failed to fetch booking IDs');
                 return;
             }
 
@@ -39,7 +42,8 @@ class SyncBookingsCommand extends Command
                 ->values()
                 ->all();
 
-            $this->info("Fetched " . count($bookingIds) . " updated bookings.");
+            $this->line("Fetched " . count($bookingIds) . " updated bookings.");
+            $this->logSync('logTest', 0, 'info', 'Fetched ' . count($bookingIds) . ' bookings');
 
             foreach (array_chunk($bookingIds, 100) as $chunk) {
                 foreach ($chunk as $bookingId) {
@@ -51,13 +55,13 @@ class SyncBookingsCommand extends Command
 
                         $booking = $response->successful() ? $response->json() : null;
 
-                        $this->info("Fetched booking {$bookingId} guest_ids from PMS: [" . implode(', ', $booking['guest_ids']) . "]");
-
+                        $this->line("Fetched booking {$bookingId} guest_ids from PMS: [" . implode(', ', $booking['guest_ids']) . "]");
                         $this->line("🔄 Start syncing booking ID: {$bookingId}");
 
                         if (!$booking || empty($booking['id']) || empty($booking['guest_ids']) || !is_array($booking['guest_ids'])) {
                             DB::rollBack();
                             $this->warn("⚠️ Skipping booking ID {$bookingId} — invalid or missing guest_ids.");
+                            $this->logSync('booking', $bookingId, 'failed', 'Invalid or incomplete booking data');
                             continue;
                         }
 
@@ -71,6 +75,7 @@ class SyncBookingsCommand extends Command
                                 'booking' => $booking,
                             ]);
                             DB::rollBack();
+                            $this->logSync('booking', $bookingId, 'failed', 'Missing room_type_id');
                             continue;
                         }
 
@@ -96,14 +101,8 @@ class SyncBookingsCommand extends Command
                         );
                        $this->line("   🛏️ RoomType ID: {$roomType['id']} | Name: {$roomType['name']} | Description: " . ($roomType['description'] ?? 'N/A'));
 
-                        if (!isset($booking['guest_ids']) || !is_array($booking['guest_ids']) || empty($booking['guest_ids'])) {
-                            DB::rollBack();
-                            $this->warn("⚠️ Skipping booking ID {$bookingId} — no valid guest_ids array.");
-                            continue;
-                        }
-
                         $syncedGuestIds = [];
-                        
+
                         foreach ($booking['guest_ids'] as $guestId) {
                             $guestResponse = Http::pms()->get("guests/{$guestId}");
                             usleep($this->rateLimitDelay);
@@ -111,6 +110,7 @@ class SyncBookingsCommand extends Command
                             if ($guestResponse->failed()) {
                                 Log::warning("⚠️ Failed to fetch guest ID {$guestId}", ['response' => $guestResponse->body()]);
                                 $this->warn("   ⚠️ Guest ID {$guestId} skipped (fetch failed)");
+                                $this->logSync('guest', $guestId, 'failed', 'Failed to fetch guest from PMS');
                                 continue;
                             }
 
@@ -133,22 +133,22 @@ class SyncBookingsCommand extends Command
                             );
 
                             $syncedGuestIds[] = (int) $guest['id'];
-                            $this->info("   → Guest synced: ID {$guest['id']} ({$guest['first_name']} {$guest['last_name']})");
+                            $this->line("   👤 Guest synced: ID {$guest['id']} ({$guest['first_name']} {$guest['last_name']})");
+                            $this->logSync('guest', $guest['id'], 'success', "Synced guest {$guest['first_name']} {$guest['last_name']}");
                         }
-
 
                         $expectedGuestIds = array_map('intval', $booking['guest_ids']);
                         sort($expectedGuestIds);
                         sort($syncedGuestIds);
 
-                        // Check that all guests were fetched correctly
                         if ($expectedGuestIds !== $syncedGuestIds) {
                             DB::rollBack();
-                            $this->warn("⚠️ Skipping booking ID {$bookingId} — mismatched guest_ids. Expected: [" . implode(',', $expectedGuestIds) . "] Got: [" . implode(',', $syncedGuestIds) . "]");
+                            $this->warn("Skipping booking ID {$bookingId} — mismatched guest_ids. Expected: [" . implode(',', $expectedGuestIds) . "] Got: [" . implode(',', $syncedGuestIds) . "]");
+                            $this->logSync('booking', $bookingId, 'failed', 'Mismatched guest_ids');
                             continue;
                         }
 
-                       $existing = Booking::find($booking['id']);
+                        $existing = Booking::find($booking['id']);
 
                         $existingGuests = is_array($existing?->guest_ids) ? array_map('intval', $existing->guest_ids) : [];
                         $newGuests = array_map('intval', $syncedGuestIds);
@@ -167,12 +167,13 @@ class SyncBookingsCommand extends Command
                         if ($unchanged) {
                             DB::rollBack();
                             $this->warn("⏭️ Skipped booking ID {$bookingId} — already up-to-date.");
+                            $this->logSync('booking', $bookingId, 'skipped', 'Already up-to-date');
                             continue;
                         }
 
                         $bookingModel = Booking::firstOrNew(['id' => $booking['id']]);
 
-                        $this->info("   → Booking guests: [" . implode(', ', $syncedGuestIds) . "]");
+                        $this->line("   → Booking guests: [" . implode(', ', $syncedGuestIds) . "]");
 
                         $bookingModel->fill([
                             'external_id' => $booking['external_id'] ?? null,
@@ -184,15 +185,16 @@ class SyncBookingsCommand extends Command
                         ]);
                         $bookingModel->guest_ids = array_map('intval', $syncedGuestIds);
 
-
                         if ($bookingModel->isDirty()) {
                             $bookingModel->save();
                             DB::commit();
-                            Log::info("✅ Booking saved", ['id' => $booking['id']]);
+                            Log::info("Booking saved", ['id' => $booking['id']]);
                             $this->line("✅ Synced booking ID: {$booking['id']}");
+                            $this->logSync('booking', $booking['id'], 'success', 'Booking synced successfully');
                         } else {
                             DB::rollBack();
                             $this->warn("⏭️ Skipped booking ID {$bookingId} — already up-to-date.");
+                            $this->logSync('booking', $bookingId, 'skipped', 'Already up-to-date (no model changes)');
                         }
                     } catch (\Exception $e) {
                         DB::rollBack();
@@ -201,15 +203,28 @@ class SyncBookingsCommand extends Command
                             'trace' => $e->getTraceAsString(),
                         ]);
                         $this->error("Failed booking ID {$bookingId}: " . $e->getMessage());
+                        $this->logSync('booking', $bookingId, 'failed', $e->getMessage());
                     }
                 }
-                $this->info("Processed chunk of " . count($chunk) . " bookings.");
+                $this->line("Processed chunk of " . count($chunk) . " bookings.");
             }
 
-            $this->info("✅ Sync complete.");
+            $this->line("✅ Sync complete.");
+            $this->logSync('logTest', 0, 'info', 'Sync complete');
         } catch (\Exception $e) {
             Log::error("Global sync failure", ['error' => $e->getMessage()]);
             $this->error("Sync failed: " . $e->getMessage());
+            $this->logSync('logTest', 0, 'failed', 'Global failure: ' . $e->getMessage());
         }
+    }
+
+    protected function logSync($type, $id, $status, $message = null)
+    {
+        SyncLog::create([
+            'resource_type' => $type,
+            'resource_id'   => $id,
+            'status'        => $status,
+            'message'       => $message,
+        ]);
     }
 }

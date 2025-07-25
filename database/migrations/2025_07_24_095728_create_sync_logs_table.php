@@ -12,13 +12,13 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('sync_logs', function (Blueprint $table) {
-    $table->id();
-    $table->string('resource_type'); // booking, guest, etc.
-    $table->unsignedBigInteger('resource_id');
-    $table->string('status'); // success, failed
-    $table->text('message')->nullable();
-    $table->timestamps();
-});
+            $table->id();
+            $table->string('resource_type'); // booking, guest, etc.
+            $table->unsignedBigInteger('resource_id');
+            $table->string('status'); // success, failed
+            $table->text('message')->nullable();
+            $table->timestamps();
+        });
     }
 
     /**
