@@ -54,9 +54,8 @@ class SyncBookingsCommand extends Command
                 $guestCache = [];
 
                 foreach ($chunk as $bookingId) {
-
                     if (Booking::where('id', $bookingId)->exists()) {
-                         $skippedCount++;
+                        $skippedCount++;
                         $this->info("⏭️ Booking ID {$bookingId} already exists. Skipping.");
                         $this->logSync('booking', $bookingId, 'skipped', 'Already exists in DB');
                         continue;
@@ -74,6 +73,8 @@ class SyncBookingsCommand extends Command
                         continue;
                     }
 
+                    $this->line("📘 Booking ID: {$booking['id']}, Room ID: {$booking['room_id']}, Guest IDs: " . implode(',', $booking['guest_ids']));
+
                     $room = Http::pms()->get("rooms/{$booking['room_id']}")->json();
                     usleep($this->rateLimitDelay);
                     $roomTypeId = $room['room_type_id'] ?? ($booking['room_type_id'] ?? null);
@@ -81,6 +82,8 @@ class SyncBookingsCommand extends Command
                         $this->logSync('booking', $bookingId, 'failed', 'Missing room_type_id or room id');
                         continue;
                     }
+
+                    $this->line("🏨 Room: ID {$room['id']}, Number: {$room['number']}, RoomType ID: {$roomTypeId}, Floor: {$room['floor']}");
 
                     $roomsToSync[$room['id']] = [
                         'id' => $room['id'],
@@ -98,6 +101,7 @@ class SyncBookingsCommand extends Command
                             'name' => $roomType['name'] ?? null,
                             'description' => $roomType['description'] ?? null,
                         ];
+                        $this->line("🛏️ RoomType: ID {$roomType['id']}, Name: {$roomType['name']}");
                     }
 
                     $syncedGuestIds = [];
@@ -123,6 +127,8 @@ class SyncBookingsCommand extends Command
                         ];
 
                         $syncedGuestIds[] = (int) $guest['id'];
+
+                        $this->line("👤 Guest ID: {$guest['id']}, Name: {$guest['first_name']} {$guest['last_name']}");
                     }
 
                     $expectedGuestIds = array_map('intval', $booking['guest_ids']);
