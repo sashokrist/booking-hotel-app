@@ -208,3 +208,9 @@ To run a specific test file:
 php artisan test tests/Feature/SyncBookingsSafeTest.php
 php artisan test tests/Feature/SyncResourcesSafeTest.php
 ✅ Note: These tests do not use RefreshDatabase, so your data remains intact.
+
+## 📸 Screenshot
+
+![Hotel Booking Sync](public/screenshots/hotel-booking.png)
+
+
