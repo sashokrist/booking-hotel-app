@@ -143,19 +143,29 @@ protected function logSync($type, $id, $status, $message = null)
 ## Summary: Flow Diagram
 
 ```text
-sync:bookings
+ssync:bookings
      │
-     ├── fetch /bookings (updated_at.gt or all)
+     ├── fetch /bookings (with optional ?updated_at.gt=...)
      │
-     └─ foreach booking:
+     └─ foreach booking_id in chunk (e.g. 100 items):
+         ├─ if booking exists locally
+         │     └─ logSync(type: booking, status: skipped)
          ├─ fetch /bookings/{id}
-         ├─ fetch /rooms/{id}
-         ├─ fetch /room-types/{id}
+         ├─ fetch /rooms/{room_id}
+         ├─ fetch /room-types/{room_type_id}
          ├─ foreach guest_id:
          │     └─ fetch /guests/{id}
-         ├─ validate + compare
-         ├─ updateOrCreate models
-         └─ logSync() per step
+         ├─ validate guest list
+         │     └─ logSync(type: booking, status: failed, reason: mismatched guest_ids)
+         ├─ prepare rooms[], room_types[], guests[], bookings[] arrays
+         └─ end foreach
+
+     ├─ upsert rooms[]
+     ├─ upsert room_types[]
+     ├─ upsert guests[]
+     ├─ upsert bookings[]
+     └─ logSync(type: logTest, status: info, message: "Sync complete")
+
 ```
 
 ## 🧪 Testing
