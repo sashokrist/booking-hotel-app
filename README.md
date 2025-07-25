@@ -204,7 +204,3 @@ php artisan test tests/Feature/SyncResourcesSafeTest.php
 ```
 
 ✅ These tests do not delete real DB data.
-
-## 📸 Screenshot
-
-![Hotel Booking Sync](docs/hotel-booking.png)
