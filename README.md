@@ -172,9 +172,6 @@ This feature test ensures that a fake booking with ID 1001 is processed correctl
 
 File: tests/Feature/SyncBookingsSafeTest.php
 
-bash
-Копиране
-Редактиране
 php artisan test tests/Feature/SyncBookingsSafeTest.php
 ✅ Verifies:
 
@@ -191,9 +188,6 @@ This test fakes external API responses to sync a specific guest, room, and room 
 
 File: tests/Feature/SyncResourcesSafeTest.php
 
-bash
-Копиране
-Редактиране
 php artisan test tests/Feature/SyncResourcesSafeTest.php
 ✅ Verifies:
 
@@ -208,15 +202,9 @@ RoomType with ID 301 exists in DB
 🧪 General Test Instructions
 To run all tests:
 
-bash
-Копиране
-Редактиране
 php artisan test
 To run a specific test file:
 
-bash
-Копиране
-Редактиране
 php artisan test tests/Feature/SyncBookingsSafeTest.php
 php artisan test tests/Feature/SyncResourcesSafeTest.php
 ✅ Note: These tests do not use RefreshDatabase, so your data remains intact.
