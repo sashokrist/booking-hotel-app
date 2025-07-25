@@ -9,6 +9,7 @@ This is a Laravel-based application designed to synchronize booking data from an
 - **Full and Incremental Sync**: Can fetch all bookings or only updated ones using an optional `--since` filter (`updated_at.gt`).
 - **Robust Error Handling**: Includes transaction-based database operations to ensure data integrity and detailed logging for debugging.
 - **API Rate Limiting**: Implements a simple delay between API requests to avoid hitting rate limits.
+- **Response Caching**: PMS API responses (booking, guest, room, room type) are cached in Laravel for faster repeated access and reduced API load.
 - **Logging Sync Results**: Saves sync metadata for each resource in a `sync_logs` table for auditing and review.
 - **Configurable**: Easily configure the PMS API endpoint and credentials.
 
@@ -115,6 +116,24 @@ protected function logSync($type, $id, $status, $message = null)
     ]);
 }
 ```
+
+## Caching
+
+This sync command uses Laravel's cache to store fetched data for each booking, guest, room, and room type:
+
+- Bookings are cached as `booking:{id}`
+- Guests as `guest:{id}`
+- Rooms as `room:{id}`
+- Room types as `room_type:{id}`
+
+Each cached entry is valid for **1 hour (3600 seconds)** by default.
+
+This improves performance, reduces API load, and avoids redundant HTTP requests during a sync batch.
+
+You can clear the cache using:
+
+```bash
+php artisan cache:clear
 
 ---
 
