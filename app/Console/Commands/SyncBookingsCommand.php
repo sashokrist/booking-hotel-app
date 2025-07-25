@@ -4,8 +4,8 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 use App\Models\Booking;
 use App\Models\Guest;
 use App\Models\Room;
@@ -51,7 +51,6 @@ class SyncBookingsCommand extends Command
                 $roomTypesToSync = [];
                 $guestsToSync = [];
                 $bookingsToSync = [];
-                $guestCache = [];
 
                 foreach ($chunk as $bookingId) {
                     if (Booking::where('id', $bookingId)->exists()) {
@@ -63,9 +62,11 @@ class SyncBookingsCommand extends Command
 
                     $this->line("\n--- Starting fetch booking ID: {$bookingId} ---");
 
-                    $response = Http::pms()->get("bookings/{$bookingId}");
-                    usleep($this->rateLimitDelay);
-                    $booking = $response->successful() ? $response->json() : null;
+                    $booking = Cache::remember("booking:{$bookingId}", 3600, function () use ($bookingId) {
+                        $response = Http::pms()->get("bookings/{$bookingId}");
+                        usleep($this->rateLimitDelay);
+                        return $response->successful() ? $response->json() : null;
+                    });
 
                     if (!$booking || empty($booking['id']) || empty($booking['guest_ids']) || !is_array($booking['guest_ids'])) {
                         $this->warn("Skipping booking ID {$bookingId} - invalid/missing guest_ids.");
@@ -73,17 +74,46 @@ class SyncBookingsCommand extends Command
                         continue;
                     }
 
-                    $this->line("📘 Booking ID: {$booking['id']}, Room ID: {$booking['room_id']}, Guest IDs: " . implode(',', $booking['guest_ids']));
+                    $room = Cache::remember("room:{$booking['room_id']}", 3600, function () use ($booking) {
+                        $response = Http::pms()->get("rooms/{$booking['room_id']}");
+                        usleep($this->rateLimitDelay);
+                        return $response->successful() ? $response->json() : null;
+                    });
 
-                    $room = Http::pms()->get("rooms/{$booking['room_id']}")->json();
-                    usleep($this->rateLimitDelay);
                     $roomTypeId = $room['room_type_id'] ?? ($booking['room_type_id'] ?? null);
                     if (!$roomTypeId || empty($room['id'])) {
                         $this->logSync('booking', $bookingId, 'failed', 'Missing room_type_id or room id');
                         continue;
                     }
 
-                    $this->line("🏨 Room: ID {$room['id']}, Number: {$room['number']}, RoomType ID: {$roomTypeId}, Floor: {$room['floor']}");
+                    $roomType = Cache::remember("room_type:{$roomTypeId}", 3600, function () use ($roomTypeId) {
+                        $response = Http::pms()->get("room-types/{$roomTypeId}");
+                        usleep($this->rateLimitDelay);
+                        return $response->successful() ? $response->json() : null;
+                    });
+
+                    $roomTypeName = $roomType['name'] ?? 'N/A';
+                    $roomTypeDescription = $roomType['description'] ?? 'N/A';
+
+                    $this->line(
+                        "📘 Booking ID: {$booking['id']} | External ID: " . ($booking['external_id'] ?? 'N/A') .
+                        " | Room ID: {$booking['room_id']} | Guest IDs: " . implode(',', $booking['guest_ids']) . "\n" .
+                        "📅 Check-in: " . ($booking['arrival_date'] ?? 'N/A') .
+                        " | Check-out: " . ($booking['departure_date'] ?? 'N/A') .
+                        " | Status: " . ($booking['status'] ?? 'N/A') .
+                        " | Notes: " . ($booking['notes'] ?? 'None')
+                    );
+
+                    $this->line("🏨 Room: ID {$room['id']} | Number: {$room['number']} | RoomType: {$roomTypeName} | Floor: {$room['floor']}");
+
+                    if (!empty($roomType['id'])) {
+                        $roomTypesToSync[$roomType['id']] = [
+                            'id' => $roomType['id'],
+                            'name' => $roomType['name'] ?? null,
+                            'description' => $roomType['description'] ?? null,
+                        ];
+                        $this->line("🛏️ RoomType: ID {$roomType['id']} | RoomType Name: {$roomTypeName} | RoomType Description: {$roomTypeDescription}");
+                    }
 
                     $roomsToSync[$room['id']] = [
                         'id' => $room['id'],
@@ -92,29 +122,13 @@ class SyncBookingsCommand extends Command
                         'room_type_id' => $roomTypeId,
                     ];
 
-                    $roomType = Http::pms()->get("room-types/{$roomTypeId}")->json();
-                    usleep($this->rateLimitDelay);
-
-                    if (!empty($roomType['id'])) {
-                        $roomTypesToSync[$roomType['id']] = [
-                            'id' => $roomType['id'],
-                            'name' => $roomType['name'] ?? null,
-                            'description' => $roomType['description'] ?? null,
-                        ];
-                        $this->line("🛏️ RoomType: ID {$roomType['id']}, Name: {$roomType['name']}");
-                    }
-
                     $syncedGuestIds = [];
                     foreach ($booking['guest_ids'] as $guestId) {
-                        if (isset($guestCache[$guestId])) {
-                            $guest = $guestCache[$guestId];
-                        } else {
-                            $guestResponse = Http::pms()->get("guests/{$guestId}");
+                        $guest = Cache::remember("guest:{$guestId}", 3600, function () use ($guestId) {
+                            $response = Http::pms()->get("guests/{$guestId}");
                             usleep($this->rateLimitDelay);
-                            if ($guestResponse->failed()) continue;
-                            $guest = $guestResponse->json();
-                            $guestCache[$guestId] = $guest;
-                        }
+                            return $response->successful() ? $response->json() : null;
+                        });
 
                         if (empty($guest['id'])) continue;
 
