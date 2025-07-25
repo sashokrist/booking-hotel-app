@@ -1,3 +1,4 @@
+
 # Hotel Booking Sync Application
 
 This is a Laravel-based application designed to synchronize booking data from an external Property Management System (PMS) API into a local database. It provides a console command to fetch and update bookings, guests, rooms, and room types.
@@ -5,7 +6,7 @@ This is a Laravel-based application designed to synchronize booking data from an
 ## Features
 
 - **Data Synchronization**: Syncs bookings, guests, rooms, and room types from a remote PMS API.
-- **Incremental Sync**: Fetches only the data that has been updated since the last sync using an `updated_at.gt` filter.
+- **Full and Incremental Sync**: Can fetch all bookings or only updated ones using an optional `--since` filter (`updated_at.gt`).
 - **Robust Error Handling**: Includes transaction-based database operations to ensure data integrity and detailed logging for debugging.
 - **API Rate Limiting**: Implements a simple delay between API requests to avoid hitting rate limits.
 - **Logging Sync Results**: Saves sync metadata for each resource in a `sync_logs` table for auditing and review.
@@ -54,7 +55,6 @@ This is a Laravel-based application designed to synchronize booking data from an
    The API connection is configured in `app/Providers/AppServiceProvider.php` using an `Http` macro:
 
    ```php
-   // in app/Providers/AppServiceProvider.php
    Http::macro('pms', function () {
        return Http::withOptions([
            'verify' => base_path('cacert.pem'),
@@ -68,16 +68,18 @@ This is a Laravel-based application designed to synchronize booking data from an
 
 ### Manual Sync
 
-Run the command manually:
+Run the command manually without any filter to fetch **all bookings** from the PMS:
 
 ```bash
 php artisan sync:bookings
 ```
 
-Or pass a custom timestamp (ISO 8601 format):
+👉 This is useful for the **initial full sync**.
+
+You can also pass a custom `--since` timestamp (ISO 8601 format) to only fetch updated bookings (incremental sync):
 
 ```bash
-php artisan sync:bookings --since="2023-10-26T10:00:00Z"
+php artisan sync:bookings --since="2025-07-20T00:00:00Z"
 ```
 
 ### Scheduled Sync
@@ -97,12 +99,10 @@ Make sure to configure your system's cron to run Laravel's scheduler.
 
 The command uses two logging systems:
 
-- **Laravel log file**: Located at `storage/logs/laravel.log`, for internal debugging and failures.
-- **Database sync log**: A `sync_logs` table tracks each attempt for each resource:
+- **Laravel log file**: Located at `storage/logs/laravel.log`
+- **Database sync log**: A `sync_logs` table tracks each resource sync
 
 ### `logSync()` Helper
-
-This method is used to persist sync results:
 
 ```php
 protected function logSync($type, $id, $status, $message = null)
@@ -116,19 +116,13 @@ protected function logSync($type, $id, $status, $message = null)
 }
 ```
 
-Used for:
-
-- Guests: `success` or `failed`
-- Bookings: `success`, `skipped`, or `failed`
-- General logs: e.g., type `logTest` for high-level progress info
-
 ---
 
 ## ✅ Functional Requirements
 
 | Requirement                                | Status | Notes                                                                 |
 |--------------------------------------------|--------|-----------------------------------------------------------------------|
-| Fetch all bookings from PMS                | ✅     | `GET /api/bookings` implemented with filtering via `updated_at.gt`   |
+| Fetch all bookings from PMS                | ✅     | Supports full sync and filtered sync via `updated_at.gt`              |
 | Fetch related room, room type, and guest   | ✅     | Implemented using `GET /rooms/{id}`, `room-types`, and `guests`      |
 | Store/update data in local DB              | ✅     | Using `updateOrCreate()` and `firstOrNew()->save()`                  |
 | Rate limiting                              | ✅     | `usleep(500000)` = 2 requests per second                             |
@@ -144,16 +138,14 @@ Used for:
 | Error Handling and Logging   | ✅     | `try/catch`, Laravel logs, and `sync_logs` tracking                   |
 | Transactions                 | ✅     | `DB::beginTransaction()` + `commit()` or `rollBack()`                |
 | Laravel conventions          | ✅     | Artisan command structure, PSR-12 compliance                         |
-| Unit tests                   | ⚠️     | Not included — can be added optionally (`php artisan make:test`)     |
-
----
+| Unit tests                   | ✅     | Two feature tests provided                                           |
 
 ## Summary: Flow Diagram
 
 ```text
 sync:bookings
      │
-     ├── fetch /bookings (updated_at.gt)
+     ├── fetch /bookings (updated_at.gt or all)
      │
      └─ foreach booking:
          ├─ fetch /bookings/{id}
@@ -164,54 +156,26 @@ sync:bookings
          ├─ validate + compare
          ├─ updateOrCreate models
          └─ logSync() per step
+```
 
+## 🧪 Testing
 
-```🧪 Testing
-1. SyncBookingsSafeTest (Booking test)
-This feature test ensures that a fake booking with ID 1001 is processed correctly without deleting or altering any existing data in the real database.
+### 1. SyncBookingsSafeTest
 
-File: tests/Feature/SyncBookingsSafeTest.php
-
+Verifies booking 1001, guest 401, room 201, room_type 301 exist or are updated.
+```bash
 php artisan test tests/Feature/SyncBookingsSafeTest.php
-✅ Verifies:
+```
 
-Booking 1001 is created or updated.
+### 2. SyncResourcesSafeTest
 
-Guest 401 is fetched and saved.
-
-Room 201 and RoomType 301 are synced if not already present.
-
-⚠️ Does not roll back DB changes — safe to run only if IDs are real or reserved for testing.
-
-2. SyncResourcesSafeTest (Room + RoomType + Guest test)
-This test fakes external API responses to sync a specific guest, room, and room type using IDs that already exist in the production database (e.g., 401, 201, 301), without changing existing data.
-
-File: tests/Feature/SyncResourcesSafeTest.php
-
+Checks if room/room type/guest exist in DB from faked API responses.
+```bash
 php artisan test tests/Feature/SyncResourcesSafeTest.php
-✅ Verifies:
+```
 
-Guest with ID 401 exists in DB
-
-Room with ID 201 exists in DB
-
-RoomType with ID 301 exists in DB
-
-✅ Asserts only presence — no destructive behavior or changes required.
-
-🧪 General Test Instructions
-To run all tests:
-
-php artisan test
-To run a specific test file:
-
-php artisan test tests/Feature/SyncBookingsSafeTest.php
-php artisan test tests/Feature/SyncResourcesSafeTest.php
-✅ Note: These tests do not use RefreshDatabase, so your data remains intact.
+✅ These tests do not delete real DB data.
 
 ## 📸 Screenshot
 
 ![Hotel Booking Sync](docs/hotel-booking.png)
-
-
-

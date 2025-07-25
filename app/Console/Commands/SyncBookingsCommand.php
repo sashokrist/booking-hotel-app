@@ -20,7 +20,12 @@ class SyncBookingsCommand extends Command
 
     public function handle()
     {
-        $since = $this->option('since') ?? now()->subDay()->toIso8601String();
+        $since = $this->option('since');
+
+        $response = $since 
+            ? Http::pms()->get('bookings', ['updated_at.gt' => $since])
+            : Http::pms()->get('bookings');
+
         $this->line("Syncing bookings updated since: $since");
         $this->logSync('logTest', 0, 'info', 'Starting sync: ' . $since);
 
