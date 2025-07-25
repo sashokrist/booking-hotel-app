@@ -211,6 +211,7 @@ php artisan test tests/Feature/SyncResourcesSafeTest.php
 
 ## 📸 Screenshot
 
-![Hotel Booking Sync](public/screenshots/hotel-booking.png)
+![Hotel Booking Sync](docs/hotel-booking.png)
+
 
 
