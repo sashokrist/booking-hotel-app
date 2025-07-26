@@ -1,6 +1,12 @@
 # Hotel Booking Sync Application
 
-This is a Laravel-based application designed to synchronize booking data from an external Property Management System (PMS) API into a local database. It provides a console command to fetch and update bookings, guests, rooms, and room types, using a dedicated service class for clean separation of concerns.
+This is a Laravel-based application designed to synchronize booking data from an external Property Management System (PMS) API into a local database. It provides:
+
+- A console command to fetch and update bookings, guests, rooms, and room types.
+- A web UI to view, filter, and manually trigger syncs.
+- A dedicated service class (`BookingSyncService`) for clean logic separation.
+
+---
 
 ## Features
 
@@ -12,6 +18,7 @@ This is a Laravel-based application designed to synchronize booking data from an
 - **Response Caching**: PMS API responses (booking, guest, room, room type) are cached in Laravel for faster repeated access and reduced API load.
 - **Logging Sync Results**: Saves sync metadata for each resource in a `sync_logs` table for auditing and review.
 - **Configurable**: Easily configure the PMS API endpoint and credentials.
+ **Web UI**: View bookings, guests, rooms, trigger syncs, toggle dark mode.
 
 ## Requirements
 
@@ -95,6 +102,58 @@ protected function schedule(Schedule $schedule): void
 ```
 
 Make sure to configure your system's cron to run Laravel's scheduler.
+
+---
+
+## Web UI
+
+Visit:
+
+```bash
+http://localhost:8000/bookings
+
+### Features:
+
+- ✅ Paginated list (20 per page)
+- 📘 Rich info per booking
+- 🔄 Sync bookings manually from UI
+- 📅 Sync filter: choose `--since` date
+- 🌓 Dark mode toggle (top-right corner)
+
+### Screenshot-style layout:
+```
+📘 Booking ID: 3417 | External ID: EXT-BKG-3417 | Room ID: 223 | Guest IDs: 416,520
+📅 Check-in: 2025-09-03 | Check-out: 2025-09-09 | Status: pending | Notes: Early check-out
+🏨 Room: ID 223 | Number: 203 | RoomType: Deluxe King | Floor: 2
+🛏️ RoomType: ID 303 | RoomType Name: Deluxe King | RoomType Description: Spacious room with king-size bed and city view
+👤 Guest ID: 416, Name: Sophia Thomas
+👤 Guest ID: 520, Name: Charlotte Robinson
+```
+
+---
+
+## UI Diagram
+
+```plaintext
++---------------------------------------------------------+
+|                  Hotel Booking Dashboard                |
+|---------------------------------------------------------|
+| 🔄 [Sync Bookings]  📅 [Filter by Since Date] 🌓 Dark Mode |
+|---------------------------------------------------------|
+| 📘 Booking #3417                                         |
+|  ├── Check-in: 2025-09-03                                |
+|  ├── Check-out: 2025-09-09                               |
+|  ├── Room: #203 (Floor 2) - Type: Deluxe King            |
+|  ├── Guests: Sophia Thomas, Charlotte Robinson           |
+|  └── Notes: Early check-out                              |
+|---------------------------------------------------------|
+| 📘 Booking #3418 ... (next)                              |
+|---------------------------------------------------------|
+|  ◀ Previous Page   1 2 3 ...  Next ▶                     |
++---------------------------------------------------------+
+
+
+---
 
 ## Service Architecture
 
