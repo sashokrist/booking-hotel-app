@@ -217,6 +217,34 @@ bash
 php artisan queue:work
 
 ```
+## API
+
+api.php
+
+Route::post('/sync-bookings', [SyncController::class, 'run']);
+
+Headers:
+
+```text
+Content Type/ application/vnd.api+json
+
+Body:
+
+{
+  "since": "2025-07-20"
+}
+
+Postman:
+
+```text
+POST
+
+http://localhost:8000/api/sync-bookings
+
+php artisan queue:work
+
+
+```
 ## Service Architecture
 
 All synchronization logic is handled by the `BookingSyncService` class:
