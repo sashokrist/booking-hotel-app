@@ -16,19 +16,11 @@
     </div>
 
     {{-- Sync Filter --}}
-    <form action="{{ route('bookings.sync') }}" method="POST" class="row g-2 align-items-center mb-3">
-        @csrf
-        <div class="col-auto">
-            <label for="since" class="form-label mb-0">📅 Sync since:</label>
-        </div>
-        <div class="col-auto">
-            <input type="datetime-local" name="since" id="since" class="form-control" value="{{ request('since') }}">
-        </div>
-        <div class="col-auto">
-            <button type="submit" class="btn btn-success">🔄 Sync Now</button>
-        </div>
+    <form method="POST" action="{{ route('bookings.sync') }}" class="d-flex align-items-center gap-2">
+    @csrf
+        <input type="date" name="since" class="form-control form-control-sm" value="{{ request('since') }}">
+        <button type="submit" class="btn btn-primary btn-sm">🔁 Update bookings</button>
     </form>
-
     {{-- Card View --}}
     <div id="cardView">
         @foreach($bookings as $booking)

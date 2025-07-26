@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Booking;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Session;
+use App\Jobs\SyncBookingsJob;
 
 class BookingWebController extends Controller
 {
@@ -19,14 +20,9 @@ class BookingWebController extends Controller
     {
         $since = $request->input('since');
 
-        $command = $since
-            ? "sync:bookings --since=\"{$since}\""
-            : "sync:bookings";
+        SyncBookingsJob::dispatch($since);
 
-        Artisan::call($command);
-
-        Session::flash('message', '✅ Booking sync completed.');
-
+        Session::flash('message', '✅ Booking sync has been queued. It will run shortly.');
         return redirect()->route('bookings.index');
     }
 }

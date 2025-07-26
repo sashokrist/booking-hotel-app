@@ -155,6 +155,63 @@ http://localhost:8000/bookings
 
 ---
 
+## Web Sync Behavior
+BookingWebController::sync(Request $request)
+This method is triggered when you click the "Sync Bookings" button in the web UI.
+
+Functionality:
+
+Retrieves an optional since parameter (e.g., from a date filter input).
+
+Queues a background job (SyncBookingsJob) instead of running the sync inline.
+
+Displays a success flash message after dispatching the job.
+
+Redirects the user back to the bookings list.
+
+public function sync(Request $request)
+{
+    $since = $request->input('since');
+    SyncBookingsJob::dispatch($since);
+    Session::flash('message', '✅ Booking sync has been queued. It will run shortly.');
+    return redirect()->route('bookings.index');
+}
+✅ This ensures the UI remains responsive, and large syncs do not block the HTTP request.
+
+App\Jobs\SyncBookingsJob
+This Laravel queued job handles syncing bookings in the background.
+
+What it does:
+
+Accepts a since date.
+
+Instantiates a BufferedOutput (compatible with the service signature).
+
+Invokes BookingSyncService::syncBookings() using the passed since value and buffered console output.
+
+Logs a confirmation message in the Laravel logs once done.
+
+class SyncBookingsJob implements ShouldQueue
+{
+    public function __construct(?string $since = null)
+    {
+        $this->since = $since;
+    }
+
+    public function handle(BookingSyncService $syncService): void
+    {
+        $output = new BufferedOutput();
+        $syncService->setDelay(500000);
+        $syncService->syncBookings($this->since, $output);
+        Log::info('✅ Background sync finished.', ['since' => $this->since]);
+    }
+}
+🔄 This job runs asynchronously via Laravel’s queue system. Be sure to start your queue worker:
+
+bash
+php artisan queue:work
+
+```
 ## Service Architecture
 
 All synchronization logic is handled by the `BookingSyncService` class:
