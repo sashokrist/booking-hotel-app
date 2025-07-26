@@ -130,7 +130,8 @@ Make sure to configure your system's cron to run Laravel's scheduler.
 
 ---
 
-🧩 Sync Helpers Trait
+## 🧩  Sync Helpers Trait
+
 To improve maintainability and reuse, all reusable private methods related to booking fetching, room/guest lookups, and caching logic have been extracted into a dedicated trait:
 
 📄 app/Traits/BookingSyncHelpers.php
