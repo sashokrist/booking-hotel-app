@@ -27,7 +27,7 @@ class SyncBookingsCommand extends Command
         try {
             $this->syncService->syncBookings($since, $this);
         } catch (\Exception $e) {
-            Log::error("❌ Global sync failure", ['error' => $e->getMessage()]);
+            Log::error("Global sync failure", ['error' => $e->getMessage()]);
             $this->error("Sync failed: " . $e->getMessage());
         }
     }
