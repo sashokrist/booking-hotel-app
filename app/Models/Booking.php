@@ -1,12 +1,12 @@
 <?php
 
-namespace App\Console\Commands;
-
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Console\Command;
+use Illuminate\Support\Collection;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
 
 class Booking extends Model
@@ -41,6 +41,13 @@ class Booking extends Model
         $ids = json_decode($this->attributes['guest_ids'] ?? '[]', true);
         return Guest::whereIn('id', is_array($ids) ? $ids : [])->get();
     }
+
+    public function guestCollection(): Collection
+    {
+        $ids = $this->guest_ids ?? [];
+        return Guest::whereIn('id', $ids)->get();
+    }
+    
 
     public function getGuestIdsAttribute($value)
     {
