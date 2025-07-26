@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Console\Command;
-
+use Illuminate\Support\Facades\Log;
 
 class Room extends Model
 {
@@ -19,8 +19,18 @@ class Room extends Model
     public static function bulkUpsert(array $rooms, ?Command $console = null): void
     {
         if (!empty($rooms)) {
-            self::upsert($rooms, ['id'], ['number', 'floor', 'room_type_id']);
-            $console?->info("Upserted " . count($rooms) . " rooms.");
+            try {
+                self::upsert(
+                    $rooms,
+                    ['id'],
+                    ['number', 'floor', 'room_type_id']
+                );
+
+                $console?->info("Upserted " . count($rooms) . " rooms.");
+            } catch (\Throwable $e) {
+                $console?->error("Failed to upsert rooms: " . $e->getMessage());
+                Log::error("Room bulk upsert failed", ['error' => $e->getMessage()]);
+            }
         }
     }
 }

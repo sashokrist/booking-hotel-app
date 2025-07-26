@@ -19,7 +19,7 @@ trait BookingSyncHelpers
             usleep($this->delay);
 
             if ($response->failed()) {
-                Log::error("❌ Failed to fetch booking IDs", ['response' => $response->body()]);
+                Log::error("Failed to fetch booking IDs", ['response' => $response->body()]);
                 return [];
             }
 
@@ -29,8 +29,8 @@ trait BookingSyncHelpers
                 ->unique()
                 ->values()
                 ->all();
-        } catch (\Exception $e) {
-            Log::error("❌ Exception while fetching booking IDs", ['error' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            Log::error("Exception while fetching booking IDs", ['error' => $e->getMessage()]);
             return [];
         }
     }
@@ -42,29 +42,44 @@ trait BookingSyncHelpers
 
     private function fetchBooking(int $bookingId): ?array
     {
-        return Cache::remember("booking:{$bookingId}", 3600, function () use ($bookingId) {
-            $response = Http::pms()->get("bookings/{$bookingId}");
-            usleep($this->delay);
-            return $response->successful() ? $response->json() : null;
-        });
+        try {
+            return Cache::remember("booking:{$bookingId}", 3600, function () use ($bookingId) {
+                $response = Http::pms()->get("bookings/{$bookingId}");
+                usleep($this->delay);
+                return $response->successful() ? $response->json() : null;
+            });
+        } catch (\Throwable $e) {
+            Log::error("Failed to fetch booking {$bookingId}", ['error' => $e->getMessage()]);
+            return null;
+        }
     }
 
     private function fetchRoom(array $booking): ?array
     {
-        return Cache::remember("room:{$booking['room_id']}", 3600, function () use ($booking) {
-            $response = Http::pms()->get("rooms/{$booking['room_id']}");
-            usleep($this->delay);
-            return $response->successful() ? $response->json() : null;
-        });
+        try {
+            return Cache::remember("room:{$booking['room_id']}", 3600, function () use ($booking) {
+                $response = Http::pms()->get("rooms/{$booking['room_id']}");
+                usleep($this->delay);
+                return $response->successful() ? $response->json() : null;
+            });
+        } catch (\Throwable $e) {
+            Log::error("Failed to fetch room {$booking['room_id']}", ['error' => $e->getMessage()]);
+            return null;
+        }
     }
 
     private function fetchRoomType(int $roomTypeId): ?array
     {
-        return Cache::remember("room_type:{$roomTypeId}", 3600, function () use ($roomTypeId) {
-            $response = Http::pms()->get("room-types/{$roomTypeId}");
-            usleep($this->delay);
-            return $response->successful() ? $response->json() : null;
-        });
+        try {
+            return Cache::remember("room_type:{$roomTypeId}", 3600, function () use ($roomTypeId) {
+                $response = Http::pms()->get("room-types/{$roomTypeId}");
+                usleep($this->delay);
+                return $response->successful() ? $response->json() : null;
+            });
+        } catch (\Throwable $e) {
+            Log::error("Failed to fetch room type {$roomTypeId}", ['error' => $e->getMessage()]);
+            return null;
+        }
     }
 
     private function fetchGuests(array $guestIds, Command $console): array
@@ -74,29 +89,33 @@ trait BookingSyncHelpers
         $syncedGuestIds = [];
 
         foreach ($guestIds as $guestId) {
-            $guest = Cache::remember("guest:{$guestId}", 3600, function () use ($guestId) {
-                $response = Http::pms()->get("guests/{$guestId}");
-                usleep($this->delay);
-                return $response->successful() ? $response->json() : null;
-            });
+            try {
+                $guest = Cache::remember("guest:{$guestId}", 3600, function () use ($guestId) {
+                    $response = Http::pms()->get("guests/{$guestId}");
+                    usleep($this->delay);
+                    return $response->successful() ? $response->json() : null;
+                });
 
-            if (empty($guest['id'])) {
-                continue;
+                if (empty($guest['id'])) {
+                    continue;
+                }
+
+                $guestsToSync[$guest['id']] = [
+                    'id' => $guest['id'],
+                    'first_name' => $guest['first_name'] ?? null,
+                    'last_name' => $guest['last_name'] ?? null,
+                    'email' => $guest['email'] ?? null,
+                    'phone' => $guest['phone'] ?? null,
+                ];
+
+                $syncedGuestIds[] = (int) $guest['id'];
+                $guestName = trim(($guest['first_name'] ?? '') . ' ' . ($guest['last_name'] ?? ''));
+                $guestNames[] = $guestName;
+
+                $console->line("Guest ID: {$guest['id']}, Name: {$guestName}");
+            } catch (\Throwable $e) {
+                Log::warning("Failed to fetch guest {$guestId}", ['error' => $e->getMessage()]);
             }
-
-            $guestsToSync[$guest['id']] = [
-                'id' => $guest['id'],
-                'first_name' => $guest['first_name'] ?? null,
-                'last_name' => $guest['last_name'] ?? null,
-                'email' => $guest['email'] ?? null,
-                'phone' => $guest['phone'] ?? null,
-            ];
-
-            $syncedGuestIds[] = (int) $guest['id'];
-            $guestName = trim(($guest['first_name'] ?? '') . ' ' . ($guest['last_name'] ?? ''));
-            $guestNames[] = $guestName;
-
-            $console->line("Guest ID: {$guest['id']}, Name: {$guestName}");
         }
 
         return compact('guestsToSync', 'guestNames', 'syncedGuestIds');

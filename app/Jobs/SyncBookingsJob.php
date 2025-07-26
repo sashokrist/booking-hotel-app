@@ -24,18 +24,27 @@ class SyncBookingsJob implements ShouldQueue
 
     public function handle(BookingSyncService $syncService): void
     {
-        Log::info('Running SyncBookingsJob with since = ' . $this->since);
+        try {
+            Log::info('📦 Running SyncBookingsJob with since = ' . $this->since);
 
-        $console = new class extends Command {
-            public function __construct() { parent::__construct(); }
-            public function line($string, $style = null, $verbosity = null) { echo $string . PHP_EOL; }
-            public function info($string, $verbosity = null) { echo $string . PHP_EOL; }
-            public function warn($string, $verbosity = null) { echo "[WARN] $string" . PHP_EOL; }
-            public function error($string, $verbosity = null) { echo "[ERROR] $string" . PHP_EOL; }
-        };
+            $console = new class extends Command {
+                public function __construct() { parent::__construct(); }
+                public function line($string, $style = null, $verbosity = null) { echo $string . PHP_EOL; }
+                public function info($string, $verbosity = null) { echo $string . PHP_EOL; }
+                public function warn($string, $verbosity = null) { echo "[WARN] $string" . PHP_EOL; }
+                public function error($string, $verbosity = null) { echo "[ERROR] $string" . PHP_EOL; }
+            };
 
-        $syncService->setDelay(500000)->syncBookings($this->since, $console);
+            $syncService->setDelay(500000)->syncBookings($this->since, $console);
 
-        Log::info('✅ Background sync finished.', ['since' => $this->since]);
+            Log::info('✅ Background sync finished successfully.', ['since' => $this->since]);
+
+        } catch (\Throwable $e) {
+            Log::error('SyncBookingsJob failed.', [
+                'since' => $this->since,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
     }
 }

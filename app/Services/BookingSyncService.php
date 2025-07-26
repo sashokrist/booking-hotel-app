@@ -172,14 +172,31 @@ class BookingSyncService
 
     private function writeCsvReport(array $report, string $path, Command $console): void
     {
-        Storage::makeDirectory('reports');
-        $fp = fopen($path, 'w');
-        fputcsv($fp, array_keys($report[0]));
-        foreach ($report as $row) {
-            fputcsv($fp, $row);
+        try {
+            Storage::makeDirectory('reports');
+
+            $fp = @fopen($path, 'w');
+            if (!$fp) {
+                throw new \RuntimeException("Unable to open file for writing: {$path}");
+            }
+
+            fputcsv($fp, array_keys($report[0]));
+
+            foreach ($report as $row) {
+                fputcsv($fp, $row);
+            }
+
+            fclose($fp);
+
+            Log::info('📁 Partial CSV report saved.', ['file' => $path]);
+            $console->info("Partial report saved: storage/app/reports/latest_booking_sync.csv");
+
+        } catch (\Throwable $e) {
+            Log::error('Failed to write CSV report', [
+                'file' => $path,
+                'error' => $e->getMessage(),
+            ]);
+            $console->error("Failed to write report: " . $e->getMessage());
         }
-        fclose($fp);
-        Log::info('📁 Partial CSV report saved.', ['file' => $path]);
-        $console->info("📁 Partial report saved: storage/app/reports/latest_booking_sync.csv");
     }
 }

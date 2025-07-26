@@ -6,8 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
-use Illuminate\Database\Eloquent\Relations\HasManyThrough;
-
+use Illuminate\Support\Facades\Log;
 
 class Booking extends Model
 {
@@ -47,7 +46,6 @@ class Booking extends Model
         $ids = $this->guest_ids ?? [];
         return Guest::whereIn('id', $ids)->get();
     }
-    
 
     public function getGuestIdsAttribute($value)
     {
@@ -57,8 +55,18 @@ class Booking extends Model
     public static function bulkUpsert(array $bookings, ?Command $console = null): void
     {
         if (!empty($bookings)) {
-            self::upsert($bookings, ['id'], ['external_id', 'room_id', 'check_in', 'check_out', 'status', 'notes', 'guest_ids']);
-            $console?->info("Upserted " . count($bookings) . " bookings.");
+            try {
+                self::upsert(
+                    $bookings,
+                    ['id'],
+                    ['external_id', 'room_id', 'check_in', 'check_out', 'status', 'notes', 'guest_ids']
+                );
+
+                $console?->info("Upserted " . count($bookings) . " bookings.");
+            } catch (\Throwable $e) {
+                $console?->error("Failed to upsert bookings: " . $e->getMessage());
+                Log::error("Booking bulk upsert failed", ['error' => $e->getMessage()]);
+            }
         }
     }
 }
