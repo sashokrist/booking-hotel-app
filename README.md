@@ -1,11 +1,11 @@
-
 # Hotel Booking Sync Application
 
-This is a Laravel-based application designed to synchronize booking data from an external Property Management System (PMS) API into a local database. It provides a console command to fetch and update bookings, guests, rooms, and room types.
+This is a Laravel-based application designed to synchronize booking data from an external Property Management System (PMS) API into a local database. It provides a console command to fetch and update bookings, guests, rooms, and room types, using a dedicated service class for clean separation of concerns.
 
 ## Features
 
 - **Data Synchronization**: Syncs bookings, guests, rooms, and room types from a remote PMS API.
+- **Dedicated Service Layer**: All sync logic is encapsulated in the `BookingSyncService` class under `App\Services` for maintainability and reuse.
 - **Full and Incremental Sync**: Can fetch all bookings or only updated ones using an optional `--since` filter (`updated_at.gt`).
 - **Robust Error Handling**: Includes transaction-based database operations to ensure data integrity and detailed logging for debugging.
 - **API Rate Limiting**: Implements a simple delay between API requests to avoid hitting rate limits.
@@ -96,6 +96,39 @@ protected function schedule(Schedule $schedule): void
 
 Make sure to configure your system's cron to run Laravel's scheduler.
 
+## Service Architecture
+
+All synchronization logic is handled by the `BookingSyncService` class:
+
+```php
+namespace App\Services;
+
+class BookingSyncService
+{
+    public function syncBookings(?string $since, Command $console): void
+    {
+        // Handles fetching, caching, and storing bookings, rooms, guests, room types
+    }
+
+    public function setDelay(int $delay): static
+    {
+        // Configures API delay to respect rate limiting
+    }
+}
+```
+
+You can call this service manually or inject it into commands/controllers.
+
+The `SyncBookingsCommand` uses this service to run the sync cleanly:
+
+```php
+public function __construct(protected BookingSyncService $syncService)
+{
+    parent::__construct();
+    $this->syncService->setDelay(500000);
+}
+```
+
 ## Logging
 
 The command uses two logging systems:
@@ -128,14 +161,11 @@ This sync command uses Laravel's cache to store fetched data for each booking, g
 
 Each cached entry is valid for **1 hour (3600 seconds)** by default.
 
-This improves performance, reduces API load, and avoids redundant HTTP requests during a sync batch.
-
 You can clear the cache using:
 
 ```bash
 php artisan cache:clear
-
----
+```
 
 ## ✅ Functional Requirements
 
@@ -143,7 +173,7 @@ php artisan cache:clear
 |--------------------------------------------|--------|-----------------------------------------------------------------------|
 | Fetch all bookings from PMS                | ✅     | Supports full sync and filtered sync via `updated_at.gt`              |
 | Fetch related room, room type, and guest   | ✅     | Implemented using `GET /rooms/{id}`, `room-types`, and `guests`      |
-| Store/update data in local DB              | ✅     | Using `updateOrCreate()` and `firstOrNew()->save()`                  |
+| Store/update data in local DB              | ✅     | Uses `updateOrCreate()` and `firstOrNew()->save()`                  |
 | Rate limiting                              | ✅     | `usleep(500000)` = 2 requests per second                             |
 | Progress feedback                          | ✅     | Uses `line()`, `warn()`, `error()` with emoji-based console output   |
 | Safe re-run (idempotent)                   | ✅     | Checks if booking has changed before updating                        |
@@ -162,29 +192,22 @@ php artisan cache:clear
 ## Summary: Flow Diagram
 
 ```text
-ssync:bookings
+sync:bookings
      │
-     ├── fetch /bookings (with optional ?updated_at.gt=...)
-     │
-     └─ foreach booking_id in chunk (e.g. 100 items):
-         ├─ if booking exists locally
-         │     └─ logSync(type: booking, status: skipped)
-         ├─ fetch /bookings/{id}
-         ├─ fetch /rooms/{room_id}
-         ├─ fetch /room-types/{room_type_id}
-         ├─ foreach guest_id:
-         │     └─ fetch /guests/{id}
-         ├─ validate guest list
-         │     └─ logSync(type: booking, status: failed, reason: mismatched guest_ids)
-         ├─ prepare rooms[], room_types[], guests[], bookings[] arrays
-         └─ end foreach
-
-     ├─ upsert rooms[]
-     ├─ upsert room_types[]
-     ├─ upsert guests[]
-     ├─ upsert bookings[]
+     ├── BookingSyncService::syncBookings()
+     │   ├── fetch /bookings (with optional ?updated_at.gt=...)
+     │   └─ foreach booking_id in chunk (e.g. 100 items):
+     │       ├─ if booking exists locally → logSync(type: booking, status: skipped)
+     │       ├─ fetch /bookings/{id}
+     │       ├─ fetch /rooms/{room_id}
+     │       ├─ fetch /room-types/{room_type_id}
+     │       ├─ foreach guest_id:
+     │       │     └─ fetch /guests/{id}
+     │       ├─ validate guest list
+     │       │     └─ logSync(type: booking, status: failed, reason: mismatched guest_ids)
+     │       ├─ prepare rooms[], room_types[], guests[], bookings[] arrays
+     │       └─ upsert all
      └─ logSync(type: logTest, status: info, message: "Sync complete")
-
 ```
 
 ## 🧪 Testing
