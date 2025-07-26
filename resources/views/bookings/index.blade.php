@@ -7,6 +7,33 @@
         {{ session('message') }}
     </div>
 @endif
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4 class="fw-bold">API Overview</h4>
+            <div class="d-flex flex-wrap gap-3">
+                <div class="text-center p-3 rounded shadow-sm" style="background-color: #f8f9fa; color: #000; min-width: 120px; flex: 1;">
+                    <h5 class="mb-0">{{ number_format($overview['bookings']) }}</h5>
+                    <small>Initial Bookings</small>
+                </div>
+                <div class="text-center p-3 rounded shadow-sm" style="background-color: #f8f9fa; color: #000; min-width: 120px; flex: 1;">
+                    <h5 class="mb-0">{{ number_format($overview['guests']) }}+</h5>
+                    <small>Guests</small>
+                </div>
+                <div class="text-center p-3 rounded shadow-sm" style="background-color: #f8f9fa; color: #000; min-width: 120px; flex: 1;">
+                    <h5 class="mb-0">{{ $overview['rooms'] }}</h5>
+                    <small>Rooms (max 150)</small>
+                </div>
+                <div class="text-center p-3 rounded shadow-sm" style="background-color: #f8f9fa; color: #000; min-width: 120px; flex: 1;">
+                    <h5 class="mb-0">{{ $overview['roomTypes'] }}</h5>
+                    <small>Room Types (max 10)</small>
+                </div>
+                <div class="text-center p-3 rounded shadow-sm" style="background-color: #f8f9fa; color: #000; min-width: 120px; flex: 1;">
+                    <h5 class="mb-0">{{ $overview['rateLimit'] }}</h5>
+                    <small>Rate Limit</small>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="mb-0">📘 Booking Records</h2>
         <div class="d-flex gap-2">

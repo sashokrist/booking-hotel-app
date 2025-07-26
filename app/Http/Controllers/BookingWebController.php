@@ -13,7 +13,17 @@ class BookingWebController extends Controller
     public function index(Request $request)
     {
         $bookings = Booking::with(['room.roomType'])->latest('check_in')->paginate(20);
-        return view('bookings.index', compact('bookings'));
+
+        // Count records for overview
+        $overview = [
+            'bookings' => \App\Models\Booking::count(),
+            'guests' => \App\Models\Guest::count(),
+            'rooms' => \App\Models\Room::count(),
+            'roomTypes' => \App\Models\RoomType::count(),
+            'rateLimit' => '2/sec',
+        ];
+
+        return view('bookings.index', compact('bookings', 'overview'));
     }
 
     public function sync(Request $request)
