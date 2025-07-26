@@ -14,14 +14,11 @@
             <button id="viewToggle" class="btn btn-outline-primary btn-sm">🔁 Switch to Table View</button>
         </div>
     </div>
-
-    {{-- Sync Filter --}}
     <form method="POST" action="{{ route('bookings.sync') }}" class="d-flex align-items-center gap-2">
     @csrf
         <input type="date" name="since" class="form-control form-control-sm" value="{{ request('since') }}">
         <button type="submit" class="btn btn-primary btn-sm">🔁 Update bookings</button>
     </form>
-    {{-- Card View --}}
     <div id="cardView">
         @foreach($bookings as $booking)
             <div class="card mb-4 shadow-sm">
@@ -56,8 +53,6 @@
             </div>
         @endforeach
     </div>
-
-    {{-- Table View --}}
     <div id="tableView" class="table-responsive d-none">
         <table class="table table-bordered table-striped">
             <thead class="table-light">
@@ -94,8 +89,6 @@
             </tbody>
         </table>
     </div>
-
-    {{-- Pagination --}}
     <div class="mt-3">
         {{ $bookings->links('pagination::bootstrap-5') }}
     </div>
@@ -104,23 +97,23 @@
 
 @section('scripts')
 <script>
-document.getElementById('viewToggle').addEventListener('click', () => {
-    const cardView = document.getElementById('cardView');
-    const tableView = document.getElementById('tableView');
-    const button = document.getElementById('viewToggle');
+    document.getElementById('viewToggle').addEventListener('click', () => {
+        const cardView = document.getElementById('cardView');
+        const tableView = document.getElementById('tableView');
+        const button = document.getElementById('viewToggle');
 
-    const isCard = !cardView.classList.contains('d-none');
-    cardView.classList.toggle('d-none', isCard);
-    tableView.classList.toggle('d-none', !isCard);
-    button.textContent = isCard ? '🔁 Switch to Card View' : '🔁 Switch to Table View';
-});
+        const isCard = !cardView.classList.contains('d-none');
+        cardView.classList.toggle('d-none', isCard);
+        tableView.classList.toggle('d-none', !isCard);
+        button.textContent = isCard ? '🔁 Switch to Card View' : '🔁 Switch to Table View';
+    });
 
-document.getElementById('toggleDarkMode').addEventListener('click', () => {
-    document.body.classList.toggle('bg-dark');
-    document.body.classList.toggle('text-light');
+    document.getElementById('toggleDarkMode').addEventListener('click', () => {
+        document.body.classList.toggle('bg-dark');
+        document.body.classList.toggle('text-light');
 
-    document.querySelectorAll('.card').forEach(c => c.classList.toggle('bg-dark'));
-    document.querySelectorAll('.card').forEach(c => c.classList.toggle('text-light'));
-});
+        document.querySelectorAll('.card').forEach(c => c.classList.toggle('bg-dark'));
+        document.querySelectorAll('.card').forEach(c => c.classList.toggle('text-light'));
+    });
 </script>
 @endsection
