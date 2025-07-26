@@ -8,7 +8,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use App\Services\BookingSyncService;
-use Illuminate\Console\Command; // 👈
+use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
 class SyncBookingsJob implements ShouldQueue
@@ -24,7 +24,8 @@ class SyncBookingsJob implements ShouldQueue
 
     public function handle(BookingSyncService $syncService): void
     {
-        // 👇 Create a dummy Command instance with minimal implementation
+        Log::info('Running SyncBookingsJob with since = ' . $this->since);
+
         $console = new class extends Command {
             public function __construct() { parent::__construct(); }
             public function line($string, $style = null, $verbosity = null) { echo $string . PHP_EOL; }
