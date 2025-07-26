@@ -6,6 +6,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Console\Command;
+
 
 class Booking extends Model
 {
@@ -43,5 +45,13 @@ class Booking extends Model
     public function getGuestIdsAttribute($value)
     {
         return json_decode($value, true);
+    }
+
+    public static function bulkUpsert(array $bookings, ?Command $console = null): void
+    {
+        if (!empty($bookings)) {
+            self::upsert($bookings, ['id'], ['external_id', 'room_id', 'check_in', 'check_out', 'status', 'notes', 'guest_ids']);
+            $console?->info("\ud83d\udcd8 Upserted " . count($bookings) . " bookings.");
+        }
     }
 }

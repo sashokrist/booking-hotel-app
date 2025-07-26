@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Console\Command;
+
 
 class Room extends Model
 {
@@ -12,5 +14,13 @@ class Room extends Model
     public function roomType()
     {
         return $this->belongsTo(RoomType::class);
+    }
+
+    public static function bulkUpsert(array $rooms, ?Command $console = null): void
+    {
+        if (!empty($rooms)) {
+            self::upsert($rooms, ['id'], ['number', 'floor', 'room_type_id']);
+            $console?->info("\ud83c\udfe8 Upserted " . count($rooms) . " rooms.");
+        }
     }
 }

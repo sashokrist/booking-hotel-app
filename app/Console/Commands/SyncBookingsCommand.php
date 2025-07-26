@@ -22,7 +22,7 @@ class SyncBookingsCommand extends Command
     {
         $since = $this->option('since');
         $this->line("Syncing bookings updated since: $since");
-        $this->logSync('logTest', 0, 'info', 'Starting sync: ' . $since);
+        SyncLog::log('logTest', 0, 'info', 'Starting sync: ' . $since);
 
         try {
             $response = Http::pms()->get('bookings', ['updated_at.gt' => $since]);
@@ -31,7 +31,7 @@ class SyncBookingsCommand extends Command
             if ($response->failed()) {
                 Log::error("Failed to fetch booking IDs", ['response' => $response->body()]);
                 $this->error('Failed to fetch booking IDs');
-                $this->logSync('logTest', 0, 'failed', 'Failed to fetch booking IDs');
+                SyncLog::log('logTest', 0, 'failed', 'Failed to fetch booking IDs');
                 return;
             }
 
@@ -43,7 +43,7 @@ class SyncBookingsCommand extends Command
                 ->all();
 
             $this->line("Fetched " . count($bookingIds) . " updated bookings.");
-            $this->logSync('logTest', 0, 'info', 'Fetched ' . count($bookingIds) . ' bookings');
+            SyncLog::log('logTest', 0, 'info', 'Fetched ' . count($bookingIds) . ' bookings');
 
             foreach (array_chunk($bookingIds, 100) as $chunk) {
                 $skippedCount = 0;
@@ -56,7 +56,7 @@ class SyncBookingsCommand extends Command
                     if (Booking::where('id', $bookingId)->exists()) {
                         $skippedCount++;
                         $this->info("⏭️ Booking ID {$bookingId} already exists. Skipping.");
-                        $this->logSync('booking', $bookingId, 'skipped', 'Already exists in DB');
+                        SyncLog::log('booking', $bookingId, 'skipped', 'Already exists in DB');
                         continue;
                     }
 
@@ -70,7 +70,7 @@ class SyncBookingsCommand extends Command
 
                     if (!$booking || empty($booking['id']) || empty($booking['guest_ids']) || !is_array($booking['guest_ids'])) {
                         $this->warn("Skipping booking ID {$bookingId} - invalid/missing guest_ids.");
-                        $this->logSync('booking', $bookingId, 'failed', 'Invalid booking data');
+                        SyncLog::log('booking', $bookingId, 'failed', 'Invalid booking data');
                         continue;
                     }
 
@@ -82,7 +82,7 @@ class SyncBookingsCommand extends Command
 
                     $roomTypeId = $room['room_type_id'] ?? ($booking['room_type_id'] ?? null);
                     if (!$roomTypeId || empty($room['id'])) {
-                        $this->logSync('booking', $bookingId, 'failed', 'Missing room_type_id or room id');
+                        SyncLog::log('booking', $bookingId, 'failed', 'Missing room_type_id or room id');
                         continue;
                     }
 
@@ -150,7 +150,7 @@ class SyncBookingsCommand extends Command
                     sort($syncedGuestIds);
 
                     if ($expectedGuestIds !== $syncedGuestIds) {
-                        $this->logSync('booking', $bookingId, 'failed', 'Mismatched guest_ids');
+                        SyncLog::log('booking', $bookingId, 'failed', 'Mismatched guest_ids');
                         continue;
                     }
 
@@ -168,63 +168,21 @@ class SyncBookingsCommand extends Command
                     $this->line("✅ Prepared booking ID: {$booking['id']}");
                 }
 
-                $this->bulkUpsertRooms(array_values($roomsToSync));
-                $this->bulkUpsertRoomTypes(array_values($roomTypesToSync));
-                $this->bulkUpsertGuests(array_values($guestsToSync));
-                $this->bulkUpsertBookings($bookingsToSync);
+                Room::bulkUpsert(array_values($roomsToSync), $this);
+                RoomType::bulkUpsert(array_values($roomTypesToSync), $this);
+                Guest::bulkUpsert(array_values($guestsToSync), $this);
+                Booking::bulkUpsert($bookingsToSync, $this);
 
                 $this->line("⏭️ Skipped $skippedCount bookings in this chunk.");
                 $this->line("Processed chunk of " . count($chunk) . " bookings.");
             }
 
             $this->line("✅ Sync complete.");
-            $this->logSync('logTest', 0, 'info', 'Sync complete');
+            SyncLog::log('logTest', 0, 'info', 'Sync complete');
         } catch (\Exception $e) {
             Log::error("Global sync failure", ['error' => $e->getMessage()]);
             $this->error("Sync failed: " . $e->getMessage());
-            $this->logSync('logTest', 0, 'failed', 'Global failure: ' . $e->getMessage());
+            SyncLog::log('logTest', 0, 'failed', 'Global failure: ' . $e->getMessage());
         }
-    }
-
-    protected function bulkUpsertRooms(array $rooms)
-    {
-        if (!empty($rooms)) {
-            Room::upsert($rooms, ['id'], ['number', 'floor', 'room_type_id']);
-            $this->info("🏨 Upserted " . count($rooms) . " rooms.");
-        }
-    }
-
-    protected function bulkUpsertRoomTypes(array $roomTypes)
-    {
-        if (!empty($roomTypes)) {
-            RoomType::upsert($roomTypes, ['id'], ['name', 'description']);
-            $this->info("🛏️ Upserted " . count($roomTypes) . " room types.");
-        }
-    }
-
-    protected function bulkUpsertGuests(array $guests)
-    {
-        if (!empty($guests)) {
-            Guest::upsert($guests, ['id'], ['first_name', 'last_name', 'email', 'phone']);
-            $this->info("👤 Upserted " . count($guests) . " guests.");
-        }
-    }
-
-    protected function bulkUpsertBookings(array $bookings)
-    {
-        if (!empty($bookings)) {
-            Booking::upsert($bookings, ['id'], ['external_id', 'room_id', 'check_in', 'check_out', 'status', 'notes', 'guest_ids']);
-            $this->info("📘 Upserted " . count($bookings) . " bookings.");
-        }
-    }
-
-    protected function logSync($type, $id, $status, $message = null)
-    {
-        SyncLog::create([
-            'resource_type' => $type,
-            'resource_id' => $id,
-            'status' => $status,
-            'message' => $message,
-        ]);
     }
 }
