@@ -58,7 +58,7 @@ class Booking extends Model
     {
         if (!empty($bookings)) {
             self::upsert($bookings, ['id'], ['external_id', 'room_id', 'check_in', 'check_out', 'status', 'notes', 'guest_ids']);
-            $console?->info("\ud83d\udcd8 Upserted " . count($bookings) . " bookings.");
+            $console?->info("Upserted " . count($bookings) . " bookings.");
         }
     }
 }

@@ -5,6 +5,7 @@ This is a Laravel-based application designed to synchronize booking data from an
 - A console command to fetch and update bookings, guests, rooms, and room types.
 - A web UI to view, filter, and manually trigger syncs.
 - A dedicated service class (`BookingSyncService`) for clean logic separation.
+- **Automatic CSV Report Generation** after every sync chunk that logs details of fetched bookings.
 
 ---
 
@@ -18,6 +19,7 @@ This is a Laravel-based application designed to synchronize booking data from an
 - **Response Caching**: PMS API responses (booking, guest, room, room type) are cached in Laravel for faster repeated access and reduced API load.
 - **Logging Sync Results**: Saves sync metadata for each resource in a `sync_logs` table for auditing and review.
 - **Configurable**: Easily configure the PMS API endpoint and credentials.
+- **CSV Report Export**: Generates a partial or full CSV report for each sync under `storage/app/reports/latest_booking_sync.csv`. The report is generated incrementally and survives interruption.
  **Web UI**: View bookings, guests, rooms, trigger syncs, toggle dark mode.
 
 ## Requirements
@@ -88,6 +90,29 @@ You can also pass a custom `--since` timestamp (ISO 8601 format) to only fetch u
 
 ```bash
 php artisan sync:bookings --since="2025-07-20T00:00:00Z"
+```
+
+✅ Every 100 bookings (chunk), a new portion of the report is written to:
+```
+storage/app/reports/latest_booking_sync.csv
+```
+The report includes: booking ID, external ID, check-in/out, room info, room type, guests. You can safely stop the command mid-way—**partial reports will still be saved**.
+
+### Download Report via Route
+
+To expose the latest sync report via HTTP:
+
+```php
+Route::get('/reports/latest-booking-sync', function () {
+    $path = storage_path('app/reports/latest_booking_sync.csv');
+    if (!file_exists($path)) abort(404);
+    return response()->download($path, 'latest_booking_sync.csv');
+});
+```
+
+Then visit:
+```
+http://localhost:8000/reports/latest-booking-sync
 ```
 
 ### Scheduled Sync

@@ -6,11 +6,8 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use App\Models\Booking;
-use App\Models\Guest;
-use App\Models\Room;
-use App\Models\RoomType;
-use App\Models\SyncLog;
+use Illuminate\Support\Facades\Storage;
+use App\Models\{Booking, Guest, Room, RoomType, SyncLog};
 
 class BookingSyncService
 {
@@ -26,6 +23,9 @@ class BookingSyncService
     {
         $console->line("Syncing bookings updated since: $since");
         SyncLog::log('logTest', 0, 'info', 'Starting sync: ' . $since);
+
+        $report = [];
+        $latestReportPath = storage_path('app/reports/latest_booking_sync.csv');
 
         try {
             $response = Http::pms()->get('bookings', ['updated_at.gt' => $since]);
@@ -58,7 +58,7 @@ class BookingSyncService
                 foreach ($chunk as $bookingId) {
                     if (Booking::where('id', $bookingId)->exists()) {
                         $skippedCount++;
-                        $console->info("⏭️ Booking ID {$bookingId} already exists. Skipping.");
+                        $console->info("Booking ID {$bookingId} already exists. Skipping.");
                         SyncLog::log('booking', $bookingId, 'skipped', 'Already exists in DB');
                         continue;
                     }
@@ -98,33 +98,21 @@ class BookingSyncService
                     $roomTypeName = $roomType['name'] ?? 'N/A';
                     $roomTypeDescription = $roomType['description'] ?? 'N/A';
 
-                    $console->line(
-                        "📘 Booking ID: {$booking['id']} | External ID: " . ($booking['external_id'] ?? 'N/A') .
-                        " | Room ID: {$booking['room_id']} | Guest IDs: " . implode(',', $booking['guest_ids']) . "\n" .
-                        "📅 Check-in: " . ($booking['arrival_date'] ?? 'N/A') .
+                    $console->line("Booking ID: {$booking['id']} | External ID: " . ($booking['external_id'] ?? 'N/A') .
+                        " | Room ID: {$booking['room_id']} | Guest IDs: " . implode(',', $booking['guest_ids']));
+
+                    $console->line("Check-in: " . ($booking['arrival_date'] ?? 'N/A') .
                         " | Check-out: " . ($booking['departure_date'] ?? 'N/A') .
                         " | Status: " . ($booking['status'] ?? 'N/A') .
-                        " | Notes: " . ($booking['notes'] ?? 'None')
-                    );
+                        " | Notes: " . ($booking['notes'] ?? 'None'));
 
-                    $console->line("🏨 Room: ID {$room['id']} | Number: {$room['number']} | RoomType: {$roomTypeName} | Floor: {$room['floor']}");
+                    $console->line("Room: ID {$room['id']} | Number: {$room['number']} | RoomType: {$roomTypeName} | Floor: {$room['floor']}");
 
                     if (!empty($roomType['id'])) {
-                        $roomTypesToSync[$roomType['id']] = [
-                            'id' => $roomType['id'],
-                            'name' => $roomType['name'] ?? null,
-                            'description' => $roomType['description'] ?? null,
-                        ];
-                        $console->line("🛏️ RoomType: ID {$roomType['id']} | RoomType Name: {$roomTypeName} | RoomType Description: {$roomTypeDescription}");
+                        $console->line("RoomType: ID {$roomType['id']} | RoomType Name: {$roomTypeName} | RoomType Description: {$roomTypeDescription}");
                     }
 
-                    $roomsToSync[$room['id']] = [
-                        'id' => $room['id'],
-                        'number' => $room['number'] ?? null,
-                        'floor' => $room['floor'] ?? null,
-                        'room_type_id' => $roomTypeId,
-                    ];
-
+                    $guestNames = [];
                     $syncedGuestIds = [];
                     foreach ($booking['guest_ids'] as $guestId) {
                         $guest = Cache::remember("guest:{$guestId}", 3600, function () use ($guestId) {
@@ -144,8 +132,9 @@ class BookingSyncService
                         ];
 
                         $syncedGuestIds[] = (int) $guest['id'];
-
-                        $console->line("👤 Guest ID: {$guest['id']}, Name: {$guest['first_name']} {$guest['last_name']}");
+                        $guestName = trim(($guest['first_name'] ?? '') . ' ' . ($guest['last_name'] ?? ''));
+                        $guestNames[] = $guestName;
+                        $console->line("Guest ID: {$guest['id']}, Name: {$guestName}");
                     }
 
                     $expectedGuestIds = array_map('intval', $booking['guest_ids']);
@@ -155,6 +144,21 @@ class BookingSyncService
                     if ($expectedGuestIds !== $syncedGuestIds) {
                         SyncLog::log('booking', $bookingId, 'failed', 'Mismatched guest_ids');
                         continue;
+                    }
+
+                    $roomsToSync[$room['id']] = [
+                        'id' => $room['id'],
+                        'number' => $room['number'] ?? null,
+                        'floor' => $room['floor'] ?? null,
+                        'room_type_id' => $roomTypeId,
+                    ];
+
+                    if (!empty($roomType['id'])) {
+                        $roomTypesToSync[$roomType['id']] = [
+                            'id' => $roomType['id'],
+                            'name' => $roomType['name'] ?? null,
+                            'description' => $roomType['description'] ?? null,
+                        ];
                     }
 
                     $bookingsToSync[] = [
@@ -168,7 +172,20 @@ class BookingSyncService
                         'guest_ids' => json_encode($syncedGuestIds),
                     ];
 
-                    $console->line("✅ Prepared booking ID: {$booking['id']}");
+                    $report[] = [
+                        'Booking ID' => $booking['id'],
+                        'External ID' => $booking['external_id'] ?? '',
+                        'Check-in' => $booking['arrival_date'] ?? '',
+                        'Check-out' => $booking['departure_date'] ?? '',
+                        'Status' => $booking['status'] ?? '',
+                        'Room Number' => $room['number'] ?? '',
+                        'Room Floor' => $room['floor'] ?? '',
+                        'RoomType Name' => $roomTypeName,
+                        'RoomType Desc' => $roomTypeDescription,
+                        'Guests' => implode('; ', $guestNames),
+                    ];
+
+                    $console->line("Prepared booking ID: {$booking['id']}");
                 }
 
                 Room::bulkUpsert(array_values($roomsToSync), $console);
@@ -176,8 +193,21 @@ class BookingSyncService
                 Guest::bulkUpsert(array_values($guestsToSync), $console);
                 Booking::bulkUpsert($bookingsToSync, $console);
 
-                $console->line("⏭️ Skipped $skippedCount bookings in this chunk.");
+                $console->line("Skipped $skippedCount bookings in this chunk.");
                 $console->line("Processed chunk of " . count($chunk) . " bookings.");
+
+                // Flush report after every chunk
+                if (!empty($report)) {
+                    Storage::makeDirectory('reports');
+                    $fp = fopen($latestReportPath, 'w');
+                    fputcsv($fp, array_keys($report[0]));
+                    foreach ($report as $row) {
+                        fputcsv($fp, $row);
+                    }
+                    fclose($fp);
+                    Log::info('📁 Partial CSV report saved.', ['file' => $latestReportPath]);
+                    $console->info("📁 Partial report saved: storage/app/reports/latest_booking_sync.csv");
+                }
             }
 
             $console->line("✅ Sync complete.");

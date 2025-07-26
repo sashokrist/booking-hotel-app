@@ -17,7 +17,7 @@ class Guest extends Model
     {
         if (!empty($guests)) {
             self::upsert($guests, ['id'], ['first_name', 'last_name', 'email', 'phone']);
-            $console?->info("\ud83d\udc64 Upserted " . count($guests) . " guests.");
+            $console?->info("Upserted " . count($guests) . " guests.");
         }
     }
 }

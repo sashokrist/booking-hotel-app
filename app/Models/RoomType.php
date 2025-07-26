@@ -17,7 +17,7 @@ class RoomType extends Model
     {
         if (!empty($roomTypes)) {
             self::upsert($roomTypes, ['id'], ['name', 'description']);
-            $console?->info("\ud83d\udccf Upserted " . count($roomTypes) . " room types.");
+            $console?->info("Upserted " . count($roomTypes) . " room types.");
         }
     }
 }
