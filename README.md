@@ -130,6 +130,51 @@ Make sure to configure your system's cron to run Laravel's scheduler.
 
 ---
 
+🧩 Sync Helpers Trait
+To improve maintainability and reuse, all reusable private methods related to booking fetching, room/guest lookups, and caching logic have been extracted into a dedicated trait:
+
+📄 app/Traits/BookingSyncHelpers.php
+This trait includes methods like:
+
+bookingExists(int $id): bool
+
+fetchBooking(int $id): ?array
+
+fetchRoom(array $booking): ?array
+
+fetchRoomType(int $roomTypeId): ?array
+
+fetchGuests(array $guestIds, Command $console): array
+
+fetchUpdatedBookingIds(?string $since): array
+
+Each method is used by the main sync service and handles PMS API communication with error handling, caching, and retry logic.
+
+💡 How to Use
+The trait is included in BookingSyncService like this:
+
+class BookingSyncService
+{
+    use BookingSyncHelpers;
+
+    protected int $delay = 500000;
+
+    public function syncBookings(?string $since, Command $console): void
+    {
+        // The trait methods are now used internally here.
+    }
+}
+This architecture:
+
+Reduces clutter inside the service
+
+Makes unit testing easier (trait methods can be mocked)
+
+Keeps fetch/caching logic centralized
+
+---
+
+
 ## Web UI
 
 Visit:
