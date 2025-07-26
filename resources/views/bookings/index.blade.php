@@ -37,7 +37,6 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="mb-0">📘 Booking Records</h2>
         <div class="d-flex gap-2">
-            <button id="toggleDarkMode" class="btn btn-outline-dark btn-sm">🌙 Toggle Dark Mode</button>
             <button id="viewToggle" class="btn btn-outline-primary btn-sm">🔁 Switch to Table View</button>
         </div>
     </div>
