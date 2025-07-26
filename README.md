@@ -123,10 +123,15 @@ http://localhost:8000/bookings
 ### Screenshot-style layout:
 ```
 📘 Booking ID: 3417 | External ID: EXT-BKG-3417 | Room ID: 223 | Guest IDs: 416,520
+
 📅 Check-in: 2025-09-03 | Check-out: 2025-09-09 | Status: pending | Notes: Early check-out
+
 🏨 Room: ID 223 | Number: 203 | RoomType: Deluxe King | Floor: 2
+
 🛏️ RoomType: ID 303 | RoomType Name: Deluxe King | RoomType Description: Spacious room with king-size bed and city view
+
 👤 Guest ID: 416, Name: Sophia Thomas
+
 👤 Guest ID: 520, Name: Charlotte Robinson
 ```
 
