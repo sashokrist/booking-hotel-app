@@ -225,7 +225,6 @@ Route::post('/sync-bookings', [SyncController::class, 'run']);
 
 Headers:
 
-```text
 Content Type/ application/vnd.api+json
 
 Body:
@@ -236,10 +235,16 @@ Body:
 
 Postman:
 
-```text
 POST
 
 http://localhost:8000/api/sync-bookings
+
+Example response:
+
+{
+    "message": "✅ Booking sync has been queued.",
+    "since": "2025-07-20"
+}
 
 php artisan queue:work
 
