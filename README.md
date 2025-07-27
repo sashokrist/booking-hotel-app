@@ -175,6 +175,46 @@ Keeps fetch/caching logic centralized
 
 ---
 
+## 🧩 HasBulkUpsert Trait
+
+To keep models clean and adhere to the DRY (Don't Repeat Yourself) principle, the repetitive `bulkUpsert` logic has been extracted into a dedicated trait:
+
+📄 `app/Traits/HasBulkUpsert.php`
+
+This trait provides a generic, high-performance `bulkUpsert` method that can be used by any model. It leverages Laravel's native `upsert` functionality to efficiently insert or update a large number of records in a single query. All data models (`Booking`, `Guest`, `Room`, `RoomType`) use this trait.
+
+### How It Works
+
+1.  **Usage**: A model simply needs to `use` the `HasBulkUpsert` trait.
+2.  **Required Implementation**: Each model using the trait must implement the `getBulkUpsertUpdateColumns()` method. This method returns an array of column names that should be updated if a record with a matching unique identifier (`id` in this case) already exists.
+
+### Example Usage in a Model
+
+Here is how the `Room` model utilizes the trait:
+
+```php
+namespace App\Models;
+
+use App\Traits\HasBulkUpsert;
+use Illuminate\Database\Eloquent\Model;
+
+class Room extends Model
+{
+    use HasFactory, HasBulkUpsert;
+
+    // ... properties
+
+    /**
+     * Defines which columns to update on a duplicate key during a bulk upsert.
+     */
+    protected static function getBulkUpsertUpdateColumns(): array
+    {
+        return ['number', 'floor', 'room_type_id'];
+    }
+}
+```
+
+This architecture centralizes the upsert logic, making the models cleaner and the overall system easier to maintain.
 
 ## Web UI
 

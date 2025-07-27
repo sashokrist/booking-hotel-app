@@ -2,14 +2,13 @@
 
 namespace App\Models;
 
+use App\Traits\HasBulkUpsert;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Console\Command;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Log;
 
 class Booking extends Model
 {
+    use HasFactory, HasBulkUpsert;
     protected $fillable = [
         'id',
         'external_id',
@@ -35,26 +34,19 @@ class Booking extends Model
         return $this->belongsTo(Room::class);
     }
 
+    /**
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
     public function guests()
     {
         return Guest::whereIn('id', $this->guest_ids ?? [])->get();
     }
 
-    public static function bulkUpsert(array $bookings, ?Command $console = null): void
+    /**
+     * @return array
+     */
+    protected static function getBulkUpsertUpdateColumns(): array
     {
-        if (!empty($bookings)) {
-            try {
-                self::upsert(
-                    $bookings,
-                    ['id'],
-                    ['external_id', 'room_id', 'check_in', 'check_out', 'status', 'notes', 'guest_ids']
-                );
-
-                $console?->info("Upserted " . count($bookings) . " bookings.");
-            } catch (\Throwable $e) {
-                $console?->error("Failed to upsert bookings: " . $e->getMessage());
-                Log::error("Booking bulk upsert failed", ['error' => $e->getMessage()]);
-            }
-        }
+        return ['external_id', 'room_id', 'check_in', 'check_out', 'status', 'notes', 'guest_ids'];
     }
 }
