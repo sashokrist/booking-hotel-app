@@ -37,19 +37,7 @@ class Booking extends Model
 
     public function guests()
     {
-        $ids = json_decode($this->attributes['guest_ids'] ?? '[]', true);
-        return Guest::whereIn('id', is_array($ids) ? $ids : [])->get();
-    }
-
-    public function guestCollection(): Collection
-    {
-        $ids = $this->guest_ids ?? [];
-        return Guest::whereIn('id', $ids)->get();
-    }
-
-    public function getGuestIdsAttribute($value)
-    {
-        return json_decode($value, true);
+        return Guest::whereIn('id', $this->guest_ids ?? [])->get();
     }
 
     public static function bulkUpsert(array $bookings, ?Command $console = null): void

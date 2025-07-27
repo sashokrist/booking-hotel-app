@@ -13,6 +13,9 @@ class RoomType extends Model
 
     protected $fillable = ['id', 'name', 'description', 'capacity', 'price'];
 
+    public $incrementing = false;
+    protected $keyType = 'int';
+
     public static function bulkUpsert(array $roomTypes, ?Command $console = null): void
     {
         if (!empty($roomTypes)) {

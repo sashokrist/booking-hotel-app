@@ -13,6 +13,9 @@ class Guest extends Model
 
     protected $fillable = ['id', 'first_name', 'last_name', 'email', 'phone'];
 
+    public $incrementing = false;
+    protected $keyType = 'int';
+
     public static function bulkUpsert(array $guests, ?Command $console = null): void
     {
         if (!empty($guests)) {
