@@ -78,6 +78,7 @@ class BookingSyncService
                     $localGuestIds === $remoteGuestIds;
 
                     if ($isUnchanged) {
+                    $skippedCount++;
                     $console->info("⏭ Booking ID {$bookingId} unchanged — skipped.");
                     SyncLog::log('booking', $bookingId, 'skipped', 'Unchanged data');
                     continue;
