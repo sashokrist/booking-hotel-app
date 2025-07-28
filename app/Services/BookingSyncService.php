@@ -48,15 +48,6 @@ class BookingSyncService
                 $bookingsToSync = [];
 
                 foreach ($chunk as $bookingId) {
-                    if ($this->bookingExists($bookingId)) {
-                        $skippedCount++;
-                        $console->info("Booking ID {$bookingId} already exists. Skipping.");
-                        SyncLog::log('booking', $bookingId, 'skipped', 'Already exists in DB');
-                        continue;
-                    }
-
-                    $console->line("\n--- Starting fetch booking ID: {$bookingId} ---");
-
                     $booking = $this->fetchBooking($bookingId);
 
                     if (!$booking || empty($booking['id']) || empty($booking['guest_ids']) || !is_array($booking['guest_ids'])) {
@@ -65,9 +56,38 @@ class BookingSyncService
                         continue;
                     }
 
-                    $room = $this->fetchRoom($booking);
+                    $local = Booking::find($bookingId);
 
+                    $remoteGuestIds = collect($booking['guest_ids'] ?? [])->sort()->values()->all();
+                    $localGuestIdsRaw = $local?->guest_ids;
+
+                    // Ensure localGuestIds is always array
+                    $localGuestIds = collect(
+                        is_string($localGuestIdsRaw)
+                            ? json_decode($localGuestIdsRaw, true)
+                            : ($localGuestIdsRaw ?? [])
+                    )->sort()->values()->all();
+
+                    $isUnchanged =
+                    $local &&
+                    $local->external_id === ($booking['external_id'] ?? null) &&
+                    $local->room_id == ($booking['room_id'] ?? null) &&
+                    $local->check_in?->toDateString() === ($booking['arrival_date'] ?? null) &&
+                    $local->check_out?->toDateString() === ($booking['departure_date'] ?? null) &&
+                    $local->status === ($booking['status'] ?? null) &&
+                    $localGuestIds === $remoteGuestIds;
+
+                    if ($isUnchanged) {
+                    $console->info("⏭ Booking ID {$bookingId} unchanged — skipped.");
+                    SyncLog::log('booking', $bookingId, 'skipped', 'Unchanged data');
+                    continue;
+                    }
+
+                    $console->line("\n--- Starting fetch booking ID: {$bookingId} ---");
+
+                    $room = $this->fetchRoom($booking);
                     $roomTypeId = $room['room_type_id'] ?? ($booking['room_type_id'] ?? null);
+
                     if (!$roomTypeId || empty($room['id'])) {
                         SyncLog::log('booking', $bookingId, 'failed', 'Missing room_type_id or room id');
                         continue;
@@ -80,12 +100,10 @@ class BookingSyncService
 
                     $console->line("Booking ID: {$booking['id']} | External ID: " . ($booking['external_id'] ?? 'N/A') .
                         " | Room ID: {$booking['room_id']} | Guest IDs: " . implode(',', $booking['guest_ids']));
-
                     $console->line("Check-in: " . ($booking['arrival_date'] ?? 'N/A') .
                         " | Check-out: " . ($booking['departure_date'] ?? 'N/A') .
                         " | Status: " . ($booking['status'] ?? 'N/A') .
                         " | Notes: " . ($booking['notes'] ?? 'None'));
-
                     $console->line("Room: ID {$room['id']} | Number: {$room['number']} | RoomType: {$roomTypeName} | Floor: {$room['floor']}");
 
                     if (!empty($roomType['id'])) {
